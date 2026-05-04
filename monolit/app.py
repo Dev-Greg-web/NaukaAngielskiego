@@ -1,8 +1,15 @@
 import json
 from flask import Flask, render_template, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
+import os
 
-app = Flask(__name__, static_folder='static', static_url_path='/')
+# 1. Wyciągamy absolutną ścieżkę do folderu, w którym fizycznie leży plik app.py
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+
+# 2. Mówimy Flaskowi: "Twoje foldery są DOKŁADNIE tutaj, nigdzie indziej!"
+app = Flask(__name__, 
+            static_folder=os.path.join(BASE_DIR, 'static'),
+            template_folder=os.path.join(BASE_DIR, 'templates'))
 
 # 1. KONFIGURACJA BAZY DANYCH (SQLite - plik lokalny)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///fiszki.db'
@@ -37,7 +44,7 @@ with app.app_context():
 # 3. FRONTEND (SERWOWANIE REACTA)
 # ==========================================
 @app.route('/')
-def home():
+def index():
     return render_template('react_app.html')
 
 # ==========================================
