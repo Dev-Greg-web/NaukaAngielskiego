@@ -178,12 +178,27 @@ function App() {
 
   // Zapis sesji w przeglądarce, żeby nie logować się co chwile
   useEffect(() => {
-    if (user) {
-      localStorage.setItem('fiszki_session', JSON.stringify(user));
-    } else {
-      localStorage.removeItem('fiszki_session');
-    }
-  }, [user]);
+    const fetchUserData = async () => {
+      if (user && user.role === 'user') {
+        try {
+          const response = await fetch('/api/login', { // Możesz użyć tego samego endpointu lub stworzyć /api/profile
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ login: user.username, autoLogin: true }) 
+          });
+          const data = await response.json();
+          if (data.success) {
+            setPlanDeck(data.planDeck || []);
+            setPlanSettings(data.planSettings || null);
+            setStats(data.stats || { streak: 0, lastStudyDate: null });
+          }
+        } catch (err) {
+          console.error("Nie udało się odświeżyć danych z serwera");
+        }
+      }
+    };
+  fetchUserData();
+}, []);
 
   // ==========================================
   // KOMUNIKACJA Z BACKENDEM (FLASK)
