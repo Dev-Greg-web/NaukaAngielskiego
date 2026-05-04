@@ -46,20 +46,25 @@ def home():
 @app.route('/api/login', methods=['POST'])
 def api_login():
     data = request.json
-    # Szukamy użytkownika w bazie danych
-    user = User.query.filter_by(username=data.get('login'), password=data.get('password')).first()
+    login = data.get('login')
+    password = data.get('password')
+
+    # Jeśli password jest puste, to znaczy że to 'refreshData' z Reacta
+    if not password:
+        user = User.query.filter_by(username=login).first()
+    else:
+        user = User.query.filter_by(username=login, password=password).first()
     
     if user:
         return jsonify({
             "success": True, 
             "role": user.role, 
             "username": user.username,
-            # Dekodujemy tekst z bazy z powrotem na obiekty zrozumiałe dla Reacta
             "planDeck": json.loads(user.plan_deck),
             "planSettings": json.loads(user.plan_settings),
             "stats": json.loads(user.stats)
         })
-    return jsonify({"success": False, "error": "Błędny login lub hasło."}), 401
+    return jsonify({"success": False, "error": "Błąd autoryzacji."}), 401
 
 @app.route('/api/sync', methods=['POST'])
 def api_sync():
