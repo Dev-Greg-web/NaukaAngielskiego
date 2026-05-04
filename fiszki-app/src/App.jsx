@@ -22,6 +22,9 @@ import FuturePerfectContinuous from './grammar/FuturePerfectContinuous';
 
 import PronunciationGuide from './PronunciationGuide';
 
+import Conditionals from './grammar/Conditionals'; // Na razie możesz stworzyć pusty plik, żeby nie było błędu
+import PassiveVoice from './grammar/PassiveVoice';
+
 const INTERVALS = [0, 1, 3, 7, 14, 30, 90];
 const getTodayStr = () => new Date().toISOString().split('T')[0];
 const addDaysStr = (days) => {
@@ -66,6 +69,17 @@ const GRAMMAR_CATEGORIES = [
       { id: 'future_continuous', title: 'Future Continuous', desc: 'Będę w trakcie robienia czegoś.', component: <FutureContinuous /> },
       { id: 'future_perfect', title: 'Future Perfect', desc: 'Do tego czasu już to skończę.', component: <FuturePerfect /> },
       { id: 'future_perfect_cont', title: 'Future Perfect Continuous', desc: 'Do tamtego momentu będę to robić już od...', component: <FuturePerfectContinuous /> },
+    ]
+  },
+  {
+    id: 'advanced',
+    title: 'Konstrukcje Zaawansowane (Advanced)',
+    colorClass: 'text-amber-600',
+    borderHover: 'hover:border-amber-400',
+    iconHover: 'group-hover:bg-amber-100 group-hover:text-amber-600',
+    lessons: [
+      { id: 'conditionals', title: 'Tryby Warunkowe', desc: 'Zero, First, Second, Third - sztuka gdybania.', component: <Conditionals /> },
+      { id: 'passive_voice', title: 'Strona Bierna (Passive Voice)', desc: 'Focus na akcji, a nie na wykonawcy.', component: <PassiveVoice /> },
     ]
   }
 ];
