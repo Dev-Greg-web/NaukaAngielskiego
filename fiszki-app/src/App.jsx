@@ -29,6 +29,18 @@ const addDaysStr = (days) => {
   return d.toISOString().split('T')[0];
 };
 
+// Globalna funkcja odtwarzania dźwięku (dostępna dla całej apki)
+const playSound = (text) => {
+  if (!('speechSynthesis' in window)) {
+    alert("Twoja przeglądarka nie obsługuje syntezatora mowy.");
+    return;
+  }
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = 'en-US';
+  utterance.rate = 0.85;
+  window.speechSynthesis.speak(utterance);
+};
+
 const GRAMMAR_CATEGORIES = [
   {
     id: 'present',
@@ -89,17 +101,6 @@ function PronunciationPractice({ onBack }) {
   const [showAnswer, setShowAnswer] = useState(false);
   const currentExercise = PRONUNCIATION_EXERCISES[currentIndex];
 
-  const playSound = (text) => {
-    if (!('speechSynthesis' in window)) {
-      alert("Twoja przeglądarka nie obsługuje syntezatora mowy.");
-      return;
-    }
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'en-US';
-    utterance.rate = 0.85;
-    window.speechSynthesis.speak(utterance);
-  };
-
   const handleNext = () => {
     setShowAnswer(false);
     setCurrentIndex((prev) => (prev + 1) % PRONUNCIATION_EXERCISES.length);
@@ -142,13 +143,11 @@ function PronunciationPractice({ onBack }) {
 }
 
 function App() {
-  // --- STANY: LOGOWANIE (Tylko sesja zostaje w localStorage) ---
   const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('fiszki_session')) || null);
   const [loginInput, setLoginInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [loginError, setLoginError] = useState('');
 
-  // --- STANY: APLIKACJA (Puste na start, pobierane z bazy) ---
   const [view, setView] = useState('home'); 
   const [quickDeck, setQuickDeck] = useState([]);
   const [quickKnown, setQuickKnown] = useState([]);
@@ -169,20 +168,14 @@ function App() {
   const fileInputRef = useRef(null);
   const planFileInputRef = useRef(null);
 
-  // Admin states
   const [newUsername, setNewUsername] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('');
 
-  // Zapis sesji w przeglądarce
   useEffect(() => {
-    if (user) {
-      localStorage.setItem('fiszki_session', JSON.stringify(user));
-    } else {
-      localStorage.removeItem('fiszki_session');
-    }
+    if (user) localStorage.setItem('fiszki_session', JSON.stringify(user));
+    else localStorage.removeItem('fiszki_session');
   }, [user]);
 
-  // Pobieranie danych przy odświeżeniu
   useEffect(() => {
     const refreshData = async () => {
       if (user) {
@@ -192,7 +185,6 @@ function App() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ login: user.username, password: "" }) 
           });
-          
           const data = await response.json();
           if (data.success) {
             setPlanDeck(data.planDeck || []);
@@ -207,14 +199,10 @@ function App() {
     refreshData();
   }, []);
 
-  // DODANE: Obsługa klawiatury dla sesji fiszek
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // Obsługuj klawisze tylko w trakcie trwania jakiejś sesji
       if (view !== 'quick-session' && view !== 'plan-session') return;
       if (sessionQueue.length === 0) return;
-
-      // Zabezpieczenie przed wpisywaniem w niewidoczne pola (dobra praktyka)
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
       const isPlan = view === 'plan-session';
@@ -223,11 +211,8 @@ function App() {
         e.preventDefault();
         if (!isFlipped) setIsFlipped(true);
       } else if (isFlipped) {
-        if (e.key === '1') {
-          isPlan ? handlePlanMark('learning') : handleQuickMark('learning');
-        } else if (e.key === '2') {
-          isPlan ? handlePlanMark('known') : handleQuickMark('known');
-        }
+        if (e.key === '1') isPlan ? handlePlanMark('learning') : handleQuickMark('learning');
+        else if (e.key === '2') isPlan ? handlePlanMark('known') : handleQuickMark('known');
       }
     };
 
@@ -235,25 +220,13 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [view, sessionQueue, isFlipped, planDeck, quickDeck, planSettings, stats, wrongInSession]);
 
-
-  // ==========================================
-  // KOMUNIKACJA Z BACKENDEM (FLASK)
-  // ==========================================
   const syncToServer = async (newDeck, newSettings, newStats) => {
     if (user) { 
       try {
         await fetch('/api/sync', {
           method: 'POST',
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            username: user.username,
-            planDeck: newDeck,
-            planSettings: newSettings,
-            stats: newStats
-          })
+          headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: user.username, planDeck: newDeck, planSettings: newSettings, stats: newStats })
         });
       } catch (err) {
         console.error("Błąd synchronizacji:", err);
@@ -267,10 +240,7 @@ function App() {
     try {
       const response = await fetch('/api/login', {
         method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
         body: JSON.stringify({ login: loginInput, password: passwordInput })
       });
       const data = await response.json();
@@ -288,32 +258,23 @@ function App() {
   };
 
   const handleLogout = () => {
-    setUser(null);
-    setLoginInput('');
-    setPasswordInput('');
-    setPlanDeck([]);
-    setPlanSettings(null);
-    setView('home');
+    setUser(null); setLoginInput(''); setPasswordInput('');
+    setPlanDeck([]); setPlanSettings(null); setView('home');
   };
 
-  const handleAddUser = (e) => {
-    e.preventDefault();
-    alert("Funkcja dodawania użytkowników będzie podpięta pod SQLite w następnym kroku!");
-  };
+  const handleAddUser = (e) => { e.preventDefault(); alert("Funkcja podpięta pod SQLite w następnym kroku!"); };
+  const handleDeleteUser = (id) => { alert("Funkcja podpięta pod SQLite w następnym kroku!"); };
 
-  const handleDeleteUser = (id) => {
-    alert("Funkcja usuwania użytkowników będzie podpięta pod SQLite w następnym kroku!");
-  };
-
-  // ==========================================
-  // LOGIKA FISZEK I PLANU NAUKI
-  // ==========================================
   const handleQuickUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
       Papa.parse(file, {
         complete: (res) => {
           const parsed = res.data.filter(r => r.length >= 2 && r[0].trim() !== '').map(r => ({ front: r[0], back: r[1] }));
+          if (parsed.length === 0) {
+            alert("Błąd! Nie wykryto żadnych słówek. Upewnij się, że plik ma poprawny format CSV (dwie kolumny oddzielone przecinkiem).");
+            return;
+          }
           startQuickSession(parsed);
         },
         skipEmptyLines: true,
@@ -322,12 +283,9 @@ function App() {
   };
 
   const startQuickSession = (cards) => {
-    setQuickDeck(cards);
-    setSessionQueue(cards);
-    setQuickKnown([]);
-    setQuickLearning([]);
-    setIsFlipped(false);
-    setView('quick-session');
+    setQuickDeck(cards); setSessionQueue(cards);
+    setQuickKnown([]); setQuickLearning([]);
+    setIsFlipped(false); setView('quick-session');
   };
 
   const handleQuickMark = (status) => {
@@ -353,6 +311,10 @@ function App() {
           const parsed = res.data.filter(r => r.length >= 2 && r[0].trim() !== '').map((r, i) => ({ 
             id: Date.now() + i, front: r[0], back: r[1], step: 0, nextReview: getTodayStr(), dayAssigned: 1 
           }));
+          if (parsed.length === 0) {
+            alert("Błąd! Nie wykryto żadnych słówek. Upewnij się, że plik ma poprawny format CSV (dwie kolumny oddzielone przecinkiem).");
+            return;
+          }
           setImportedCards(parsed);
           setView('setup-plan');
         },
@@ -364,16 +326,12 @@ function App() {
   const handleCreatePlan = () => {
     const wordsPerDay = Math.ceil(importedCards.length / targetDays);
     const arrangedDeck = importedCards.map((card, index) => ({
-      ...card,
-      dayAssigned: Math.floor(index / wordsPerDay) + 1
+      ...card, dayAssigned: Math.floor(index / wordsPerDay) + 1
     }));
-    
     const newSettings = { targetDays, currentDay: 1, wordsPerDay };
-    setPlanDeck(arrangedDeck);
-    setPlanSettings(newSettings);
+    setPlanDeck(arrangedDeck); setPlanSettings(newSettings);
     syncToServer(arrangedDeck, newSettings, stats); 
-    setImportedCards([]);
-    setView('roadmap');
+    setImportedCards([]); setView('roadmap');
   };
 
   const startPlanSession = () => {
@@ -382,13 +340,9 @@ function App() {
     const reviewsToday = planDeck.filter(c => c.step > 0 && c.nextReview <= todayStr);
     const sessionCards = [...newToday, ...reviewsToday];
 
-    setSessionQueue(sessionCards);
-    setQuickDeck(sessionCards); // Zapisujemy oryginalną talię na wypadek powtórki
-    setQuickKnown([]);
-    setQuickLearning([]);
-    setWrongIds(new Set());
-    setIsFlipped(false);
-    setView('plan-session');
+    setSessionQueue(sessionCards); setQuickDeck(sessionCards);
+    setQuickKnown([]); setQuickLearning([]); setWrongIds(new Set());
+    setIsFlipped(false); setView('plan-session');
   };
 
   const handlePlanMark = (status) => {
@@ -397,14 +351,12 @@ function App() {
 
     setTimeout(() => {
       let updatedDeck = planDeck;
-
       if (status === 'learning') {
         setWrongIds(prev => new Set(prev).add(currentCard.id));
         setQuickLearning(prev => [...prev, currentCard]); 
       } else {
         let newStep = wrongInSession.has(currentCard.id) ? 1 : currentCard.step + 1;
         if (newStep >= INTERVALS.length) newStep = INTERVALS.length - 1;
-        
         updatedDeck = planDeck.map(c => c.id === currentCard.id ? { ...c, step: newStep, nextReview: addDaysStr(INTERVALS[newStep]) } : c);
         setPlanDeck(updatedDeck);
         setQuickKnown(prev => [...prev, currentCard]);
@@ -412,10 +364,7 @@ function App() {
 
       setSessionQueue(prev => {
         const newQ = prev.slice(1);
-        if (newQ.length === 0) {
-          syncToServer(updatedDeck, planSettings, stats);
-          setView('plan-summary');
-        }
+        if (newQ.length === 0) { syncToServer(updatedDeck, planSettings, stats); setView('plan-summary'); }
         return newQ;
       });
     }, 150);
@@ -424,47 +373,34 @@ function App() {
   const finishPlanSession = () => {
     const todayStr = getTodayStr();
     let newStats = { ...stats };
-    
     if (stats.lastStudyDate !== todayStr) {
       if (stats.lastStudyDate === addDaysStr(-1)) newStats.streak += 1;
       else newStats.streak = 1;
       newStats.lastStudyDate = todayStr;
       setStats(newStats);
     }
-
     let newSettings = { ...planSettings };
     const unlearnedCurrentDay = planDeck.filter(c => c.dayAssigned === planSettings.currentDay && c.step === 0);
     if (unlearnedCurrentDay.length === 0 && planSettings.currentDay < planSettings.targetDays) {
-      newSettings.currentDay += 1;
-      setPlanSettings(newSettings);
+      newSettings.currentDay += 1; setPlanSettings(newSettings);
     }
-    
     syncToServer(planDeck, newSettings, newStats);
     setView('plan-completed');
   };
 
   const handleResetPlan = () => {
     if (window.confirm("Czy na pewno chcesz zresetować i usunąć cały plan nauki?")) {
-      setView('home'); 
-      setPlanSettings(null); 
-      setPlanDeck([]);
-      setStats({ streak: 0, lastStudyDate: null });
+      setView('home'); setPlanSettings(null); setPlanDeck([]); setStats({ streak: 0, lastStudyDate: null });
       syncToServer([], null, { streak: 0, lastStudyDate: null });
     }
   };
-
-  // ==========================================
-  // RENDEROWANIE WIDOKÓW
-  // ==========================================
 
   if (!user) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 relative overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none" style={{ backgroundImage: 'radial-gradient(#4f46e5 1px, transparent 1px)', backgroundSize: '30px 30px' }}></div>
         <div className="bg-white p-10 rounded-3xl shadow-2xl max-w-md w-full relative z-10">
-          <div className="bg-indigo-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
-            <Lock className="text-indigo-600" size={40} />
-          </div>
+          <div className="bg-indigo-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"><Lock className="text-indigo-600" size={40} /></div>
           <h1 className="text-3xl font-black text-center text-slate-800 mb-2">Platforma Nauki</h1>
           <p className="text-center text-slate-500 mb-8">Dostęp po weryfikacji w chmurze (Flask).</p>
           <form onSubmit={handleLogin} className="space-y-4">
@@ -496,9 +432,7 @@ function App() {
         <User className={user.role === 'admin' ? "text-red-500" : "text-indigo-500"} size={20} />
         Zalogowano jako: {user.username} {user.role === 'admin' && <span className="bg-red-100 text-red-600 text-xs px-2 py-0.5 rounded-md ml-2 uppercase tracking-wider">Admin</span>}
       </div>
-      <button onClick={handleLogout} className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-red-500 transition">
-        Wyloguj <LogOut size={16} />
-      </button>
+      <button onClick={handleLogout} className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-red-500 transition">Wyloguj <LogOut size={16} /></button>
     </div>
   );
 
@@ -510,10 +444,7 @@ function App() {
           <button onClick={() => setView('home')} className="flex items-center gap-2 text-slate-500 hover:text-slate-800 mb-8 transition font-semibold"><ArrowLeft size={20} /> Wróć do Dashboardu</button>
           <div className="flex items-center gap-4 mb-8">
             <div className="p-4 bg-red-100 text-red-600 rounded-2xl"><Shield size={40} /></div>
-            <div>
-              <h1 className="text-4xl font-black text-slate-800">Panel Administratora</h1>
-              <p className="text-slate-500 text-lg">Zarządzaj kontami uczniów i systemem (SQL).</p>
-            </div>
+            <div><h1 className="text-4xl font-black text-slate-800">Panel Administratora</h1><p className="text-slate-500 text-lg">Zarządzaj kontami uczniów i systemem (SQL).</p></div>
           </div>
           <div className="grid md:grid-cols-2 gap-6 mb-8">
             <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 flex flex-col">
@@ -526,7 +457,6 @@ function App() {
                   <button type="submit" className="bg-indigo-600 text-white font-bold py-2 rounded-xl hover:bg-indigo-700 transition flex items-center justify-center gap-2"><UserPlus size={18} /> Dodaj do SQLite</button>
                 </div>
               </form>
-              <p className="text-slate-400 text-sm italic">Wizualizacja bazy z Flaska w przygotowaniu...</p>
             </div>
             <div className="flex flex-col gap-6">
               <div className="bg-red-50 border border-red-200 rounded-3xl p-6 h-full">
@@ -551,10 +481,7 @@ function App() {
             <div className="md:col-span-2 bg-gradient-to-r from-red-600 to-red-500 text-white p-8 rounded-3xl shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all cursor-pointer flex items-center justify-between" onClick={() => setView('admin-panel')}>
               <div className="flex items-center gap-6">
                 <div className="h-16 w-16 bg-white/20 rounded-2xl flex items-center justify-center"><Shield size={32} /></div>
-                <div>
-                  <h2 className="text-2xl font-bold mb-1">Panel Admina</h2>
-                  <p className="text-red-100">Kliknij tutaj, aby zarządzać kontami i systemem (SQL).</p>
-                </div>
+                <div><h2 className="text-2xl font-bold mb-1">Panel Admina</h2><p className="text-red-100">Kliknij tutaj, aby zarządzać kontami i systemem (SQL).</p></div>
               </div>
               <ChevronRight size={32} className="opacity-50" />
             </div>
@@ -683,16 +610,20 @@ function App() {
   if (view === 'quick-upload' || view === 'plan-upload') {
     const isPlan = view === 'plan-upload';
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 pt-20">
+      <div className="min-h-screen bg-slate-50 flex flex-col pt-20 p-6">
         <TopBar />
-        <div className="bg-white p-10 rounded-3xl shadow-xl text-center max-w-md w-full border border-slate-100 relative">
-          <button onClick={() => setView('home')} className="absolute top-6 left-6 text-slate-400 hover:text-slate-700"><ArrowLeft /></button>
-          <Upload className={`mx-auto h-16 w-16 mb-6 ${isPlan ? 'text-indigo-500' : 'text-blue-500'}`} />
-          <h2 className="text-3xl font-bold mb-3">{isPlan ? 'Twój nowy plan' : 'Wgraj listę'}</h2>
-          <p className="text-slate-500 mb-8">Wgraj plik CSV. (Format: słowo polskie,słowo angielskie)</p>
-          <button onClick={() => isPlan ? planFileInputRef.current?.click() : fileInputRef.current?.click()} className={`w-full text-white px-6 py-4 rounded-xl font-bold text-lg shadow-md transition ${isPlan ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-blue-600 hover:bg-blue-700'}`}>Wybierz plik .csv</button>
-          <input type="file" accept=".csv" className="hidden" ref={fileInputRef} onChange={handleQuickUpload} />
-          <input type="file" accept=".csv" className="hidden" ref={planFileInputRef} onChange={handlePlanUpload} />
+        <div className="max-w-4xl mx-auto w-full">
+          <button onClick={() => setView('home')} className="flex items-center gap-2 text-slate-500 hover:text-slate-800 mb-8 transition font-semibold">
+            <ArrowLeft size={20} /> Wróć do menu
+          </button>
+          <div className="bg-white p-10 rounded-3xl shadow-xl text-center max-w-md mx-auto border border-slate-100">
+            <Upload className={`mx-auto h-16 w-16 mb-6 ${isPlan ? 'text-indigo-500' : 'text-blue-500'}`} />
+            <h2 className="text-3xl font-bold mb-3">{isPlan ? 'Twój nowy plan' : 'Wgraj listę'}</h2>
+            <p className="text-slate-500 mb-8">Wgraj plik CSV. (Format: słowo polskie,słowo angielskie)</p>
+            <button onClick={() => isPlan ? planFileInputRef.current?.click() : fileInputRef.current?.click()} className={`w-full text-white px-6 py-4 rounded-xl font-bold text-lg shadow-md transition ${isPlan ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-blue-600 hover:bg-blue-700'}`}>Wybierz plik .csv</button>
+            <input type="file" accept=".csv" className="hidden" ref={fileInputRef} onChange={handleQuickUpload} />
+            <input type="file" accept=".csv" className="hidden" ref={planFileInputRef} onChange={handlePlanUpload} />
+          </div>
         </div>
       </div>
     );
@@ -700,17 +631,27 @@ function App() {
 
   if (view === 'setup-plan') {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 pt-20">
+      <div className="min-h-screen bg-slate-50 flex flex-col pt-20 p-6">
         <TopBar />
-        <div className="bg-white p-10 rounded-3xl shadow-xl max-w-md w-full">
-          <Calendar className="mx-auto h-16 w-16 text-indigo-500 mb-6" />
-          <h2 className="text-2xl font-bold mb-2 text-center text-slate-800">Ustaw cel</h2>
-          <p className="text-slate-500 text-center mb-8">Rozpoznano {importedCards.length} słówek. W ile dni chcesz przejść przez cały materiał?</p>
-          <input type="range" min="1" max={importedCards.length > 365 ? 365 : importedCards.length} value={targetDays} onChange={(e) => setTargetDays(Number(e.target.value))} className="w-full accent-indigo-600 mb-4"/>
-          <div className="flex justify-between font-semibold text-slate-700 mb-8">
-            <span>{targetDays} dni</span><span className="text-indigo-600">{Math.ceil(importedCards.length / targetDays)} nowych/dzień</span>
+        <div className="max-w-4xl mx-auto w-full">
+          <button onClick={() => setView('home')} className="flex items-center gap-2 text-slate-500 hover:text-slate-800 mb-8 transition font-semibold">
+            <ArrowLeft size={20} /> Przerwij i wróć
+          </button>
+          <div className="bg-white p-10 rounded-3xl shadow-xl max-w-md mx-auto">
+            <Calendar className="mx-auto h-16 w-16 text-indigo-500 mb-6" />
+            <h2 className="text-2xl font-bold mb-2 text-center text-slate-800">Ustaw cel</h2>
+            <p className="text-slate-500 text-center mb-8">Rozpoznano {importedCards.length} słówek. W ile dni chcesz przejść przez cały materiał?</p>
+            
+            <div className="flex items-center gap-4 mb-4">
+              <input type="range" min="1" max={importedCards.length > 365 ? 365 : importedCards.length} value={targetDays} onChange={(e) => setTargetDays(Number(e.target.value))} className="w-full accent-indigo-600"/>
+              <input type="number" min="1" max={importedCards.length > 365 ? 365 : importedCards.length} value={targetDays} onChange={(e) => setTargetDays(Number(e.target.value))} className="w-20 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-center font-bold outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+
+            <div className="flex justify-between font-semibold text-slate-700 mb-8">
+              <span>Czas trwania planu</span><span className="text-indigo-600">{Math.ceil(importedCards.length / targetDays)} nowych/dzień</span>
+            </div>
+            <button onClick={handleCreatePlan} className="w-full bg-indigo-600 text-white px-6 py-4 rounded-xl font-bold text-lg shadow-md hover:bg-indigo-700">Wygeneruj Mapę Nauki</button>
           </div>
-          <button onClick={handleCreatePlan} className="w-full bg-indigo-600 text-white px-6 py-4 rounded-xl font-bold text-lg shadow-md hover:bg-indigo-700">Wygeneruj Mapę Nauki</button>
         </div>
       </div>
     );
@@ -794,41 +735,38 @@ function App() {
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4">
         <div className="w-full max-w-lg">
           <div className="mb-6">
-            
-            {/* PRZYCISK WYJŚCIA (EXIT ROUTE) */}
             <div className="flex justify-between items-center text-slate-400 text-sm font-bold mb-4">
-              <button 
-                onClick={() => setView(isPlan ? 'roadmap' : 'home')}
-                className="flex items-center gap-1.5 bg-slate-800 hover:bg-red-500/20 hover:text-red-400 text-slate-300 px-3 py-1.5 rounded-lg transition"
-                title="Przerwij i wyjdź"
-              >
+              <button onClick={() => setView(isPlan ? 'roadmap' : 'home')} className="flex items-center gap-1.5 bg-slate-800 hover:bg-red-500/20 hover:text-red-400 text-slate-300 px-3 py-1.5 rounded-lg transition" title="Przerwij i wyjdź">
                 <LogOut size={14} /> Wyjdź
               </button>
-              
               <div className="flex gap-3 items-center">
-                <span className={`px-2 py-0.5 rounded text-xs ${isReview ? 'bg-emerald-500/20 text-emerald-400' : 'bg-blue-500/20 text-blue-400'}`}>
-                  {isReview ? 'Powtórka' : 'Nowe Słowo'}
-                </span>
+                <span className={`px-2 py-0.5 rounded text-xs ${isReview ? 'bg-emerald-500/20 text-emerald-400' : 'bg-blue-500/20 text-blue-400'}`}>{isReview ? 'Powtórka' : 'Nowe Słowo'}</span>
                 <button onClick={() => setStudyDirection(prev => prev === 'frontToBack' ? 'backToFront' : 'frontToBack')} className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-1 rounded-lg text-xs transition" title="Zmień kierunek tłumaczenia"><ArrowRightLeft size={12} />{studyDirection === 'frontToBack' ? 'PL ➔ EN' : 'EN ➔ PL'}</button>
               </div>
             </div>
-
-            {/* POZYTYWNY PASEK POSTĘPU */}
             <div className="flex justify-between items-center text-slate-400 text-xs font-bold mb-2">
-              <span>Postęp sesji</span>
-              <span>Fiszka {currentNumber > total ? total : currentNumber} z {total}</span>
+              <span>Postęp sesji</span><span>Fiszka {currentNumber > total ? total : currentNumber} z {total}</span>
             </div>
             <div className="w-full bg-slate-800 rounded-full h-2"><div className={`h-2 rounded-full transition-all ${isPlan ? 'bg-indigo-500' : 'bg-blue-500'}`} style={{ width: `${progress}%` }}></div></div>
           </div>
           
-          {/* PRZYSPIESZONA ANIMACJA (duration-300) */}
           <div className="w-full aspect-[3/2] perspective-1000 cursor-pointer mb-6" onClick={() => setIsFlipped(true)}>
             <div className={`w-full h-full relative transition-transform duration-300 transform-style-3d ${isFlipped ? 'rotate-y-180' : ''}`}>
+              
+              {/* PRZÓD KARTY */}
               <div className="absolute w-full h-full bg-white rounded-3xl shadow-2xl flex flex-col items-center justify-center p-8 backface-hidden">
+                <button onClick={(e) => { e.stopPropagation(); playSound(currentFrontText); }} className="absolute top-4 right-4 p-3 bg-slate-100 hover:bg-indigo-100 text-slate-400 hover:text-indigo-600 rounded-full transition-colors" title="Odsłuchaj słowo">
+                  <Volume2 size={24} />
+                </button>
                 <h2 className="text-4xl md:text-5xl font-black text-slate-800 text-center">{currentFrontText}</h2>
                 {!isFlipped && <div className="absolute bottom-6 text-slate-300 text-sm font-bold animate-pulse">Kliknij lub naciśnij [Spacja]</div>}
               </div>
+              
+              {/* TYŁ KARTY */}
               <div className={`absolute w-full h-full ${isPlan ? 'bg-indigo-600' : 'bg-blue-600'} rounded-3xl shadow-2xl flex flex-col items-center justify-center p-8 backface-hidden rotate-y-180`}>
+                <button onClick={(e) => { e.stopPropagation(); playSound(currentBackText); }} className="absolute top-4 right-4 p-3 bg-black/10 hover:bg-black/20 text-white rounded-full transition-colors" title="Odsłuchaj słowo">
+                  <Volume2 size={24} />
+                </button>
                 <h2 className="text-4xl md:text-5xl font-black text-white text-center">{currentBackText}</h2>
               </div>
             </div>
@@ -839,17 +777,11 @@ function App() {
               <div className="flex gap-4 animate-in fade-in slide-in-from-bottom-2">
                 <button onClick={() => isPlan ? handlePlanMark('learning') : handleQuickMark('learning')} className="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/30 px-4 py-3 rounded-2xl transition flex justify-center items-center gap-3">
                   <X size={24} /> 
-                  <div className="flex flex-col items-start text-left">
-                    <span className="font-black text-lg leading-tight">UCZĘ SIĘ</span>
-                    <span className="text-xs font-semibold opacity-60">Klawisz [1]</span>
-                  </div>
+                  <div className="flex flex-col items-start text-left"><span className="font-black text-lg leading-tight">UCZĘ SIĘ</span><span className="text-xs font-semibold opacity-60">Klawisz [1]</span></div>
                 </button>
                 <button onClick={() => isPlan ? handlePlanMark('known') : handleQuickMark('known')} className="flex-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 border border-emerald-500/30 px-4 py-3 rounded-2xl transition flex justify-center items-center gap-3">
                   <Check size={24} /> 
-                  <div className="flex flex-col items-start text-left">
-                    <span className="font-black text-lg leading-tight">UMIEM</span>
-                    <span className="text-xs font-semibold opacity-60">Klawisz [2]</span>
-                  </div>
+                  <div className="flex flex-col items-start text-left"><span className="font-black text-lg leading-tight">UMIEM</span><span className="text-xs font-semibold opacity-60">Klawisz [2]</span></div>
                 </button>
               </div>
             )}
@@ -859,7 +791,6 @@ function App() {
     );
   }
 
-  // SZYBKA SESJA - PODSUMOWANIE (QUICK MENU)
   if (view === 'quick-summary') {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 pt-20">
@@ -884,74 +815,32 @@ function App() {
     );
   }
 
-  // PLAN NAUKI - PODSUMOWANIE (QUICK MENU)
   if (view === 'plan-summary') {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 pt-20">
         <TopBar />
         <div className="bg-white p-10 rounded-3xl shadow-xl text-center max-w-md w-full animate-in fade-in zoom-in duration-300">
-          <div className="mx-auto h-20 w-20 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mb-6">
-            <CheckCircle size={40} />
-          </div>
+          <div className="mx-auto h-20 w-20 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mb-6"><CheckCircle size={40} /></div>
           <h2 className="text-3xl font-black mb-2 text-slate-800">Partia Zakończona!</h2>
           <p className="text-slate-500 mb-8">Zanim zakończysz dzień, upewnij się, że umiesz wszystko.</p>
-
           <div className="flex gap-4 justify-center mb-8">
-            <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl flex-1 flex flex-col items-center justify-center">
-              <span className="text-sm font-bold text-emerald-600 uppercase tracking-wider mb-1">Umiem</span>
-              <span className="text-3xl font-black text-emerald-700">{quickKnown.length}</span>
-            </div>
-            <div className="bg-red-50 border border-red-100 p-4 rounded-2xl flex-1 flex flex-col items-center justify-center">
-              <span className="text-sm font-bold text-red-600 uppercase tracking-wider mb-1">Uczę się</span>
-              <span className="text-3xl font-black text-red-700">{quickLearning.length}</span>
-            </div>
+            <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl flex-1 flex flex-col items-center justify-center"><span className="text-sm font-bold text-emerald-600 uppercase tracking-wider mb-1">Umiem</span><span className="text-3xl font-black text-emerald-700">{quickKnown.length}</span></div>
+            <div className="bg-red-50 border border-red-100 p-4 rounded-2xl flex-1 flex flex-col items-center justify-center"><span className="text-sm font-bold text-red-600 uppercase tracking-wider mb-1">Uczę się</span><span className="text-3xl font-black text-red-700">{quickLearning.length}</span></div>
           </div>
-
           <div className="flex flex-col gap-3">
             {quickLearning.length > 0 ? (
-              <button
-                onClick={() => {
-                  setSessionQueue(quickLearning);
-                  setQuickLearning([]);
-                  setView('plan-session');
-                }}
-                className="w-full bg-red-500 hover:bg-red-600 text-white px-6 py-4 rounded-xl font-bold transition shadow-sm flex items-center justify-center gap-2 group"
-              >
-                <RotateCcw size={20} className="group-hover:-rotate-180 transition-transform duration-500" />
-                Powtórz błędne ({quickLearning.length})
-              </button>
+              <button onClick={() => { setSessionQueue(quickLearning); setQuickLearning([]); setView('plan-session'); }} className="w-full bg-red-500 hover:bg-red-600 text-white px-6 py-4 rounded-xl font-bold transition shadow-sm flex items-center justify-center gap-2 group"><RotateCcw size={20} className="group-hover:-rotate-180 transition-transform duration-500" /> Powtórz błędne ({quickLearning.length})</button>
             ) : (
-              <button
-                onClick={finishPlanSession}
-                className="w-full bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-4 rounded-xl font-bold transition shadow-sm flex items-center justify-center gap-2"
-              >
-                <Trophy size={20} />
-                Zakończ dzień i zapisz postęp!
-              </button>
+              <button onClick={finishPlanSession} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-4 rounded-xl font-bold transition shadow-sm flex items-center justify-center gap-2"><Trophy size={20} /> Zakończ dzień i zapisz postęp!</button>
             )}
-
-            <button
-              onClick={() => startQuickSession(quickDeck)}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-4 rounded-xl font-bold transition shadow-sm flex items-center justify-center gap-2"
-            >
-              <RotateCcw size={20} />
-              Trening: cała talia od nowa
-            </button>
-
-            <button
-              onClick={() => setView('roadmap')}
-              className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-4 rounded-xl font-bold transition flex items-center justify-center gap-2 mt-2"
-            >
-              <ArrowLeft size={20} />
-              Zostaw na później (Powrót do mapy)
-            </button>
+            <button onClick={() => startQuickSession(quickDeck)} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-4 rounded-xl font-bold transition shadow-sm flex items-center justify-center gap-2"><RotateCcw size={20} /> Trening: cała talia od nowa</button>
+            <button onClick={() => setView('roadmap')} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-4 rounded-xl font-bold transition flex items-center justify-center gap-2 mt-2"><ArrowLeft size={20} /> Zostaw na później (Powrót do mapy)</button>
           </div>
         </div>
       </div>
     );
   }
 
-  // PLAN NAUKI - EKRAN KOŃCOWY PO ZAPISIE
   if (view === 'plan-completed') {
     return (
       <div className="min-h-screen bg-indigo-600 flex flex-col items-center justify-center p-4 pt-20">
@@ -960,9 +849,7 @@ function App() {
           <Trophy className="mx-auto h-20 w-20 text-yellow-400 mb-6" />
           <h2 className="text-3xl font-black text-slate-800 mb-2">Znakomicie!</h2>
           <p className="text-slate-500 mb-8">Utrzymujesz algorytm w idealnym stanie. Passa rośnie!</p>
-          <button onClick={() => setView('roadmap')} className="w-full bg-slate-900 text-white px-6 py-4 rounded-xl font-bold text-lg hover:bg-black transition shadow-lg flex items-center justify-center gap-2">
-             Wróć do Mapy Planu
-          </button>
+          <button onClick={() => setView('roadmap')} className="w-full bg-slate-900 text-white px-6 py-4 rounded-xl font-bold text-lg hover:bg-black transition shadow-lg flex items-center justify-center gap-2">Wróć do Mapy Planu</button>
         </div>
       </div>
     );
