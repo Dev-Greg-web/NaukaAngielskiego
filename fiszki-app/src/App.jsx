@@ -23,6 +23,10 @@ import FuturePerfectContinuous from './grammar/FuturePerfectContinuous';
 import PronunciationGuide from './PronunciationGuide';
 
 import Conditionals from './grammar/Conditionals'; // Na razie możesz stworzyć pusty plik, żeby nie było błędu
+import ZeroConditional from './grammar/ZeroConditional';
+import FirstConditional from './grammar/FirstConditional';
+import SecondConditional from './grammar/SecondConditional';
+import ThirdConditional from './grammar/ThirdConditional';
 import PassiveVoice from './grammar/PassiveVoice';
 
 const INTERVALS = [0, 1, 3, 7, 14, 30, 90];
@@ -78,7 +82,10 @@ const GRAMMAR_CATEGORIES = [
     borderHover: 'hover:border-amber-400',
     iconHover: 'group-hover:bg-amber-100 group-hover:text-amber-600',
     lessons: [
-      { id: 'conditionals', title: 'Tryby Warunkowe', desc: 'Zero, First, Second, Third - sztuka gdybania.', component: <Conditionals /> },
+      { id: 'cond_zero', title: 'Zero Conditional', desc: 'Fakty, nawyki i prawa natury (100% pewności).', component: <ZeroConditional /> },
+      { id: 'cond_first', title: 'First Conditional', desc: 'Realna i prawdopodobna przyszłość.', component: <FirstConditional /> },
+      { id: 'cond_second', title: 'Second Conditional', desc: 'Gdybanie i marzenia (mało prawdopodobne).', component: <SecondConditional /> },
+      { id: 'cond_third', title: 'Third Conditional', desc: 'Żal za przeszłością (za późno na zmiany).', component: <ThirdConditional /> },
       { id: 'passive_voice', title: 'Strona Bierna (Passive Voice)', desc: 'Focus na akcji, a nie na wykonawcy.', component: <PassiveVoice /> },
     ]
   }
