@@ -4,7 +4,7 @@ import {
   Upload, RotateCcw, Check, X, Play, Flame, Calendar, 
   Zap, Map, ArrowLeft, Trophy, CheckCircle, Lock, BookOpen, 
   Library, ChevronRight, Volume2, Ear, ArrowRightLeft, 
-  Shield, User, LogOut, Key, Trash2, UserPlus, Users
+  Shield, User, LogOut, Key, Trash2, UserPlus, Users, Settings // DODANO: Settings
 } from 'lucide-react';
 
 import PresentSimple from './grammar/PresentSimple';
@@ -29,7 +29,6 @@ const addDaysStr = (days) => {
   return d.toISOString().split('T')[0];
 };
 
-// Globalna funkcja odtwarzania dźwięku (dostępna dla całej apki)
 const playSound = (text) => {
   if (!('speechSynthesis' in window)) {
     alert("Twoja przeglądarka nie obsługuje syntezatora mowy.");
@@ -43,11 +42,7 @@ const playSound = (text) => {
 
 const GRAMMAR_CATEGORIES = [
   {
-    id: 'present',
-    title: 'Czasy Teraźniejsze (Present Tenses)',
-    colorClass: 'text-emerald-600',
-    borderHover: 'hover:border-emerald-400',
-    iconHover: 'group-hover:bg-emerald-100 group-hover:text-emerald-600',
+    id: 'present', title: 'Czasy Teraźniejsze (Present Tenses)', colorClass: 'text-emerald-600', borderHover: 'hover:border-emerald-400', iconHover: 'group-hover:bg-emerald-100 group-hover:text-emerald-600',
     lessons: [
       { id: 'present_simple', title: 'Present Simple', desc: 'Rutyny, fakty i nawyki.', component: <PresentSimple /> },
       { id: 'present_continuous', title: 'Present Continuous', desc: 'Dzieje się tu i teraz!', component: <PresentContinuous /> },
@@ -56,11 +51,7 @@ const GRAMMAR_CATEGORIES = [
     ]
   },
   {
-    id: 'past',
-    title: 'Czasy Przeszłe (Past Tenses)',
-    colorClass: 'text-blue-600',
-    borderHover: 'hover:border-blue-400',
-    iconHover: 'group-hover:bg-blue-100 group-hover:text-blue-600',
+    id: 'past', title: 'Czasy Przeszłe (Past Tenses)', colorClass: 'text-blue-600', borderHover: 'hover:border-blue-400', iconHover: 'group-hover:bg-blue-100 group-hover:text-blue-600',
     lessons: [
       { id: 'past_simple', title: 'Past Simple', desc: 'Zakończone akcje w przeszłości.', component: <PastSimple /> },
       { id: 'past_continuous', title: 'Past Continuous', desc: 'Tło wydarzeń i przerwane akcje.', component: <PastContinuous /> },
@@ -69,11 +60,7 @@ const GRAMMAR_CATEGORIES = [
     ]
   },
   {
-    id: 'future',
-    title: 'Czasy Przyszłe (Future Tenses)',
-    colorClass: 'text-violet-600',
-    borderHover: 'hover:border-violet-400',
-    iconHover: 'group-hover:bg-violet-100 group-hover:text-violet-600',
+    id: 'future', title: 'Czasy Przyszłe (Future Tenses)', colorClass: 'text-violet-600', borderHover: 'hover:border-violet-400', iconHover: 'group-hover:bg-violet-100 group-hover:text-violet-600',
     lessons: [
       { id: 'future_forms', title: 'Przyszłość (4 Sposoby)', desc: 'Will, going to, plany i harmonogramy.', component: <FutureForms /> },
       { id: 'future_continuous', title: 'Future Continuous', desc: 'Będę w trakcie robienia czegoś.', component: <FutureContinuous /> },
@@ -158,7 +145,14 @@ function App() {
   const [stats, setStats] = useState({ streak: 0, lastStudyDate: null });
 
   const [activeGrammar, setActiveGrammar] = useState(null);
+  
+  // NOWE STANY DLA USTAWIEŃ I QUIZU
+  const [showSettings, setShowSettings] = useState(false);
   const [studyDirection, setStudyDirection] = useState('frontToBack');
+  const [studyMode, setStudyMode] = useState('flashcards'); // 'flashcards' | 'quiz'
+  const [quizInput, setQuizInput] = useState('');
+  const [quizFeedback, setQuizFeedback] = useState(null); // null, 'correct', 'incorrect'
+  const quizInputRef = useRef(null); // Do auto-focusu
 
   const [importedCards, setImportedCards] = useState([]);
   const [targetDays, setTargetDays] = useState(30);
@@ -199,26 +193,41 @@ function App() {
     refreshData();
   }, []);
 
+  // Globalna obsługa klawiatury dla fiszek
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (view !== 'quick-session' && view !== 'plan-session') return;
       if (sessionQueue.length === 0) return;
+      // Jeśli jesteśmy w trybie quizu i w polu tekstowym, omijamy skróty z fiszek
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
       const isPlan = view === 'plan-session';
 
-      if (e.code === 'Space' || e.key === 'Enter') {
-        e.preventDefault();
-        if (!isFlipped) setIsFlipped(true);
-      } else if (isFlipped) {
-        if (e.key === '1') isPlan ? handlePlanMark('learning') : handleQuickMark('learning');
-        else if (e.key === '2') isPlan ? handlePlanMark('known') : handleQuickMark('known');
+      // Tylko dla trybu fiszek
+      if (studyMode === 'flashcards') {
+        if (e.code === 'Space' || e.key === 'Enter') {
+          e.preventDefault();
+          if (!isFlipped) setIsFlipped(true);
+        } else if (isFlipped) {
+          if (e.key === '1') isPlan ? handlePlanMark('learning') : handleQuickMark('learning');
+          else if (e.key === '2') isPlan ? handlePlanMark('known') : handleQuickMark('known');
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [view, sessionQueue, isFlipped, planDeck, quickDeck, planSettings, stats, wrongInSession]);
+  }, [view, sessionQueue, isFlipped, studyMode, planDeck, quickDeck, planSettings, stats, wrongInSession]);
+
+  // Ustawienie focusu po załadowaniu nowej karty w trybie quizu
+  useEffect(() => {
+    if (studyMode === 'quiz' && sessionQueue.length > 0 && !quizFeedback) {
+      setTimeout(() => {
+        quizInputRef.current?.focus();
+      }, 100); // Małe opóźnienie dla pewności, że render się skończył
+    }
+  }, [sessionQueue, studyMode, quizFeedback]);
+
 
   const syncToServer = async (newDeck, newSettings, newStats) => {
     if (user) { 
@@ -285,7 +294,8 @@ function App() {
   const startQuickSession = (cards) => {
     setQuickDeck(cards); setSessionQueue(cards);
     setQuickKnown([]); setQuickLearning([]);
-    setIsFlipped(false); setView('quick-session');
+    setIsFlipped(false); setQuizFeedback(null); setQuizInput(''); setShowSettings(false);
+    setView('quick-session');
   };
 
   const handleQuickMark = (status) => {
@@ -293,7 +303,7 @@ function App() {
     if (status === 'known') setQuickKnown(prev => [...prev, card]);
     else setQuickLearning(prev => [...prev, card]);
     
-    setIsFlipped(false);
+    setIsFlipped(false); setQuizFeedback(null); setQuizInput('');
     setTimeout(() => {
       setSessionQueue(prev => {
         const newQ = prev.slice(1);
@@ -342,12 +352,13 @@ function App() {
 
     setSessionQueue(sessionCards); setQuickDeck(sessionCards);
     setQuickKnown([]); setQuickLearning([]); setWrongIds(new Set());
-    setIsFlipped(false); setView('plan-session');
+    setIsFlipped(false); setQuizFeedback(null); setQuizInput(''); setShowSettings(false);
+    setView('plan-session');
   };
 
   const handlePlanMark = (status) => {
     const currentCard = sessionQueue[0];
-    setIsFlipped(false);
+    setIsFlipped(false); setQuizFeedback(null); setQuizInput('');
 
     setTimeout(() => {
       let updatedDeck = planDeck;
@@ -368,6 +379,36 @@ function App() {
         return newQ;
       });
     }, 150);
+  };
+
+  // LOGIKA QUIZU
+  const handleQuizSubmit = (e) => {
+    e.preventDefault();
+    if (quizFeedback) return; // Zapobiega podwójnemu zatwierdzeniu
+    if (!quizInput.trim()) return;
+
+    const isPlan = view === 'plan-session';
+    const currentCard = sessionQueue[0];
+    // Zależnie od kierunku, sprawdzamy tył lub przód
+    const correctAnswer = studyDirection === 'frontToBack' ? currentCard.back : currentCard.front;
+    
+    // Prosta walidacja: zamienia na małe litery i ucina spacje
+    const isCorrect = quizInput.trim().toLowerCase() === correctAnswer.trim().toLowerCase();
+
+    setQuizFeedback(isCorrect ? 'correct' : 'incorrect');
+
+    if (isCorrect) {
+      // Jeśli poprawnie, pokazujemy zielone podświetlenie i automatycznie przewijamy po 1s
+      setTimeout(() => {
+        isPlan ? handlePlanMark('known') : handleQuickMark('known');
+      }, 1000);
+    }
+    // Jeśli źle, użytkownik sam musi kliknąć przycisk "Dalej" (handleQuizAcknowledge)
+  };
+
+  const handleQuizAcknowledge = () => {
+    const isPlan = view === 'plan-session';
+    isPlan ? handlePlanMark('learning') : handleQuickMark('learning');
   };
 
   const finishPlanSession = () => {
@@ -394,6 +435,10 @@ function App() {
       syncToServer([], null, { streak: 0, lastStudyDate: null });
     }
   };
+
+  // ==========================================
+  // RENDEROWANIE WIDOKÓW
+  // ==========================================
 
   if (!user) {
     return (
@@ -718,6 +763,7 @@ function App() {
     );
   }
 
+  // WSPÓLNY EKRAN SESJI (FISZKI LUB QUIZ)
   if ((view === 'quick-session' || view === 'plan-session') && sessionQueue.length > 0) {
     const isPlan = view === 'plan-session';
     const currentCard = sessionQueue[0];
@@ -732,16 +778,54 @@ function App() {
     const currentBackText = studyDirection === 'frontToBack' ? currentCard.back : currentCard.front;
 
     return (
-      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4">
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4 relative">
+        
+        {/* MODAL USTAWIEŃ */}
+        {showSettings && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4">
+            <div className="bg-slate-800 border border-slate-700 p-8 rounded-3xl w-full max-w-sm shadow-2xl">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-white font-bold text-xl flex items-center gap-2"><Settings /> Ustawienia Sesji</h3>
+                <button onClick={() => setShowSettings(false)} className="text-slate-400 hover:text-white"><X /></button>
+              </div>
+              
+              <div className="space-y-6">
+                <div>
+                  <p className="text-slate-400 text-sm font-bold uppercase mb-3">Tryb Nauki</p>
+                  <div className="flex bg-slate-900 rounded-xl p-1">
+                    <button onClick={() => setStudyMode('flashcards')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition ${studyMode === 'flashcards' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}>Fiszki</button>
+                    <button onClick={() => setStudyMode('quiz')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition ${studyMode === 'quiz' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}>Pisemny Quiz</button>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-slate-400 text-sm font-bold uppercase mb-3">Kierunek Tłumaczenia</p>
+                  <div className="flex bg-slate-900 rounded-xl p-1">
+                    <button onClick={() => setStudyDirection('frontToBack')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition ${studyDirection === 'frontToBack' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'}`}>PL ➔ EN</button>
+                    <button onClick={() => setStudyDirection('backToFront')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition ${studyDirection === 'backToFront' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'}`}>EN ➔ PL</button>
+                  </div>
+                </div>
+              </div>
+              
+              <button onClick={() => setShowSettings(false)} className="w-full mt-8 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition">Gotowe</button>
+            </div>
+          </div>
+        )}
+
         <div className="w-full max-w-lg">
           <div className="mb-6">
             <div className="flex justify-between items-center text-slate-400 text-sm font-bold mb-4">
               <button onClick={() => setView(isPlan ? 'roadmap' : 'home')} className="flex items-center gap-1.5 bg-slate-800 hover:bg-red-500/20 hover:text-red-400 text-slate-300 px-3 py-1.5 rounded-lg transition" title="Przerwij i wyjdź">
                 <LogOut size={14} /> Wyjdź
               </button>
-              <div className="flex gap-3 items-center">
-                <span className={`px-2 py-0.5 rounded text-xs ${isReview ? 'bg-emerald-500/20 text-emerald-400' : 'bg-blue-500/20 text-blue-400'}`}>{isReview ? 'Powtórka' : 'Nowe Słowo'}</span>
-                <button onClick={() => setStudyDirection(prev => prev === 'frontToBack' ? 'backToFront' : 'frontToBack')} className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-1 rounded-lg text-xs transition" title="Zmień kierunek tłumaczenia"><ArrowRightLeft size={12} />{studyDirection === 'frontToBack' ? 'PL ➔ EN' : 'EN ➔ PL'}</button>
+              
+              <div className="flex gap-2 items-center">
+                <span className={`px-2 py-1 rounded text-xs mr-2 ${isReview ? 'bg-emerald-500/20 text-emerald-400' : 'bg-blue-500/20 text-blue-400'}`}>{isReview ? 'Powtórka' : 'Nowe Słowo'}</span>
+                
+                {/* ZĘBATKA USTAWIEŃ */}
+                <button onClick={() => setShowSettings(true)} className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition" title="Ustawienia">
+                  <Settings size={18} />
+                </button>
               </div>
             </div>
             <div className="flex justify-between items-center text-slate-400 text-xs font-bold mb-2">
@@ -750,42 +834,85 @@ function App() {
             <div className="w-full bg-slate-800 rounded-full h-2"><div className={`h-2 rounded-full transition-all ${isPlan ? 'bg-indigo-500' : 'bg-blue-500'}`} style={{ width: `${progress}%` }}></div></div>
           </div>
           
-          <div className="w-full aspect-[3/2] perspective-1000 cursor-pointer mb-6" onClick={() => setIsFlipped(true)}>
-            <div className={`w-full h-full relative transition-transform duration-300 transform-style-3d ${isFlipped ? 'rotate-y-180' : ''}`}>
-              
-              {/* PRZÓD KARTY */}
-              <div className="absolute w-full h-full bg-white rounded-3xl shadow-2xl flex flex-col items-center justify-center p-8 backface-hidden">
-                <button onClick={(e) => { e.stopPropagation(); playSound(currentFrontText); }} className="absolute top-4 right-4 p-3 bg-slate-100 hover:bg-indigo-100 text-slate-400 hover:text-indigo-600 rounded-full transition-colors" title="Odsłuchaj słowo">
-                  <Volume2 size={24} />
-                </button>
-                <h2 className="text-4xl md:text-5xl font-black text-slate-800 text-center">{currentFrontText}</h2>
-                {!isFlipped && <div className="absolute bottom-6 text-slate-300 text-sm font-bold animate-pulse">Kliknij lub naciśnij [Spacja]</div>}
+          {/* TRYB FISZEK */}
+          {studyMode === 'flashcards' && (
+            <>
+              <div className="w-full aspect-[3/2] perspective-1000 cursor-pointer mb-6" onClick={() => setIsFlipped(true)}>
+                <div className={`w-full h-full relative transition-transform duration-300 transform-style-3d ${isFlipped ? 'rotate-y-180' : ''}`}>
+                  <div className="absolute w-full h-full bg-white rounded-3xl shadow-2xl flex flex-col items-center justify-center p-8 backface-hidden">
+                    <button onClick={(e) => { e.stopPropagation(); playSound(currentFrontText); }} className="absolute top-4 right-4 p-3 bg-slate-100 hover:bg-indigo-100 text-slate-400 hover:text-indigo-600 rounded-full transition-colors" title="Odsłuchaj słowo"><Volume2 size={24} /></button>
+                    <h2 className="text-4xl md:text-5xl font-black text-slate-800 text-center">{currentFrontText}</h2>
+                    {!isFlipped && <div className="absolute bottom-6 text-slate-300 text-sm font-bold animate-pulse">Kliknij lub naciśnij [Spacja]</div>}
+                  </div>
+                  <div className={`absolute w-full h-full ${isPlan ? 'bg-indigo-600' : 'bg-blue-600'} rounded-3xl shadow-2xl flex flex-col items-center justify-center p-8 backface-hidden rotate-y-180`}>
+                    <button onClick={(e) => { e.stopPropagation(); playSound(currentBackText); }} className="absolute top-4 right-4 p-3 bg-black/10 hover:bg-black/20 text-white rounded-full transition-colors" title="Odsłuchaj słowo"><Volume2 size={24} /></button>
+                    <h2 className="text-4xl md:text-5xl font-black text-white text-center">{currentBackText}</h2>
+                  </div>
+                </div>
               </div>
-              
-              {/* TYŁ KARTY */}
-              <div className={`absolute w-full h-full ${isPlan ? 'bg-indigo-600' : 'bg-blue-600'} rounded-3xl shadow-2xl flex flex-col items-center justify-center p-8 backface-hidden rotate-y-180`}>
-                <button onClick={(e) => { e.stopPropagation(); playSound(currentBackText); }} className="absolute top-4 right-4 p-3 bg-black/10 hover:bg-black/20 text-white rounded-full transition-colors" title="Odsłuchaj słowo">
-                  <Volume2 size={24} />
-                </button>
-                <h2 className="text-4xl md:text-5xl font-black text-white text-center">{currentBackText}</h2>
+              <div className="h-20">
+                {isFlipped && (
+                  <div className="flex gap-4 animate-in fade-in slide-in-from-bottom-2">
+                    <button onClick={() => isPlan ? handlePlanMark('learning') : handleQuickMark('learning')} className="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/30 px-4 py-3 rounded-2xl transition flex justify-center items-center gap-3">
+                      <X size={24} /> <div className="flex flex-col items-start text-left"><span className="font-black text-lg leading-tight">UCZĘ SIĘ</span><span className="text-xs font-semibold opacity-60">Klawisz [1]</span></div>
+                    </button>
+                    <button onClick={() => isPlan ? handlePlanMark('known') : handleQuickMark('known')} className="flex-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 border border-emerald-500/30 px-4 py-3 rounded-2xl transition flex justify-center items-center gap-3">
+                      <Check size={24} /> <div className="flex flex-col items-start text-left"><span className="font-black text-lg leading-tight">UMIEM</span><span className="text-xs font-semibold opacity-60">Klawisz [2]</span></div>
+                    </button>
+                  </div>
+                )}
               </div>
+            </>
+          )}
+
+          {/* TRYB PISEMNY QUIZ */}
+          {studyMode === 'quiz' && (
+            <div className="w-full bg-white rounded-3xl shadow-2xl flex flex-col p-8 mb-6 relative overflow-hidden">
+              <button onClick={() => playSound(currentFrontText)} className="absolute top-4 right-4 p-3 bg-slate-100 hover:bg-indigo-100 text-slate-400 hover:text-indigo-600 rounded-full transition-colors" title="Odsłuchaj słowo"><Volume2 size={24} /></button>
+              
+              <p className="text-center text-slate-500 font-bold uppercase tracking-wider text-xs mb-4">Przetłumacz na {studyDirection === 'frontToBack' ? 'angielski' : 'polski'}</p>
+              <h2 className="text-4xl font-black text-slate-800 text-center mb-8">{currentFrontText}</h2>
+              
+              <form onSubmit={handleQuizSubmit} className="flex flex-col gap-4">
+                <div className="relative">
+                  <input 
+                    ref={quizInputRef}
+                    type="text" 
+                    value={quizInput}
+                    onChange={(e) => setQuizInput(e.target.value)}
+                    disabled={quizFeedback !== null}
+                    placeholder="Wpisz tłumaczenie..."
+                    className={`w-full border-2 rounded-2xl px-6 py-4 text-center text-2xl font-bold focus:outline-none transition-colors
+                      ${quizFeedback === 'correct' ? 'bg-emerald-50 border-emerald-500 text-emerald-700' : 
+                        quizFeedback === 'incorrect' ? 'bg-red-50 border-red-500 text-red-700' : 
+                        'bg-slate-50 border-slate-200 focus:border-indigo-500 text-slate-800'}`}
+                  />
+                </div>
+
+                {/* Feedback i Akcje w Quizie */}
+                {quizFeedback === null ? (
+                  <button type="submit" className={`w-full text-white font-black py-4 rounded-2xl transition shadow-lg ${isPlan ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-blue-600 hover:bg-blue-700'}`}>
+                    Sprawdź
+                  </button>
+                ) : quizFeedback === 'correct' ? (
+                  <div className="text-center bg-emerald-500 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2">
+                    <CheckCircle size={24} /> Doskonale!
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-4 animate-in slide-in-from-bottom-2">
+                    <div className="text-center p-4 bg-red-100 rounded-2xl border border-red-200">
+                      <p className="text-red-500 text-sm font-bold uppercase mb-1">Poprawna odpowiedź:</p>
+                      <p className="text-red-700 text-2xl font-black">{currentBackText}</p>
+                    </div>
+                    <button type="button" onClick={handleQuizAcknowledge} autoFocus className="w-full bg-slate-800 hover:bg-slate-900 text-white font-black py-4 rounded-2xl transition flex items-center justify-center gap-2">
+                      Zrozumiałem, dalej <ArrowRightLeft size={20} />
+                    </button>
+                  </div>
+                )}
+              </form>
             </div>
-          </div>
-          
-          <div className="h-20">
-            {isFlipped && (
-              <div className="flex gap-4 animate-in fade-in slide-in-from-bottom-2">
-                <button onClick={() => isPlan ? handlePlanMark('learning') : handleQuickMark('learning')} className="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/30 px-4 py-3 rounded-2xl transition flex justify-center items-center gap-3">
-                  <X size={24} /> 
-                  <div className="flex flex-col items-start text-left"><span className="font-black text-lg leading-tight">UCZĘ SIĘ</span><span className="text-xs font-semibold opacity-60">Klawisz [1]</span></div>
-                </button>
-                <button onClick={() => isPlan ? handlePlanMark('known') : handleQuickMark('known')} className="flex-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 border border-emerald-500/30 px-4 py-3 rounded-2xl transition flex justify-center items-center gap-3">
-                  <Check size={24} /> 
-                  <div className="flex flex-col items-start text-left"><span className="font-black text-lg leading-tight">UMIEM</span><span className="text-xs font-semibold opacity-60">Klawisz [2]</span></div>
-                </button>
-              </div>
-            )}
-          </div>
+          )}
+
         </div>
       </div>
     );
@@ -820,21 +947,61 @@ function App() {
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 pt-20">
         <TopBar />
         <div className="bg-white p-10 rounded-3xl shadow-xl text-center max-w-md w-full animate-in fade-in zoom-in duration-300">
-          <div className="mx-auto h-20 w-20 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mb-6"><CheckCircle size={40} /></div>
+          <div className="mx-auto h-20 w-20 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mb-6">
+            <CheckCircle size={40} />
+          </div>
           <h2 className="text-3xl font-black mb-2 text-slate-800">Partia Zakończona!</h2>
           <p className="text-slate-500 mb-8">Zanim zakończysz dzień, upewnij się, że umiesz wszystko.</p>
+
           <div className="flex gap-4 justify-center mb-8">
-            <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl flex-1 flex flex-col items-center justify-center"><span className="text-sm font-bold text-emerald-600 uppercase tracking-wider mb-1">Umiem</span><span className="text-3xl font-black text-emerald-700">{quickKnown.length}</span></div>
-            <div className="bg-red-50 border border-red-100 p-4 rounded-2xl flex-1 flex flex-col items-center justify-center"><span className="text-sm font-bold text-red-600 uppercase tracking-wider mb-1">Uczę się</span><span className="text-3xl font-black text-red-700">{quickLearning.length}</span></div>
+            <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl flex-1 flex flex-col items-center justify-center">
+              <span className="text-sm font-bold text-emerald-600 uppercase tracking-wider mb-1">Umiem</span>
+              <span className="text-3xl font-black text-emerald-700">{quickKnown.length}</span>
+            </div>
+            <div className="bg-red-50 border border-red-100 p-4 rounded-2xl flex-1 flex flex-col items-center justify-center">
+              <span className="text-sm font-bold text-red-600 uppercase tracking-wider mb-1">Uczę się</span>
+              <span className="text-3xl font-black text-red-700">{quickLearning.length}</span>
+            </div>
           </div>
+
           <div className="flex flex-col gap-3">
             {quickLearning.length > 0 ? (
-              <button onClick={() => { setSessionQueue(quickLearning); setQuickLearning([]); setView('plan-session'); }} className="w-full bg-red-500 hover:bg-red-600 text-white px-6 py-4 rounded-xl font-bold transition shadow-sm flex items-center justify-center gap-2 group"><RotateCcw size={20} className="group-hover:-rotate-180 transition-transform duration-500" /> Powtórz błędne ({quickLearning.length})</button>
+              <button
+                onClick={() => {
+                  setSessionQueue(quickLearning);
+                  setQuickLearning([]);
+                  setView('plan-session');
+                }}
+                className="w-full bg-red-500 hover:bg-red-600 text-white px-6 py-4 rounded-xl font-bold transition shadow-sm flex items-center justify-center gap-2 group"
+              >
+                <RotateCcw size={20} className="group-hover:-rotate-180 transition-transform duration-500" />
+                Powtórz błędne ({quickLearning.length})
+              </button>
             ) : (
-              <button onClick={finishPlanSession} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-4 rounded-xl font-bold transition shadow-sm flex items-center justify-center gap-2"><Trophy size={20} /> Zakończ dzień i zapisz postęp!</button>
+              <button
+                onClick={finishPlanSession}
+                className="w-full bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-4 rounded-xl font-bold transition shadow-sm flex items-center justify-center gap-2"
+              >
+                <Trophy size={20} />
+                Zakończ dzień i zapisz postęp!
+              </button>
             )}
-            <button onClick={() => startQuickSession(quickDeck)} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-4 rounded-xl font-bold transition shadow-sm flex items-center justify-center gap-2"><RotateCcw size={20} /> Trening: cała talia od nowa</button>
-            <button onClick={() => setView('roadmap')} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-4 rounded-xl font-bold transition flex items-center justify-center gap-2 mt-2"><ArrowLeft size={20} /> Zostaw na później (Powrót do mapy)</button>
+
+            <button
+              onClick={() => startQuickSession(quickDeck)}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-4 rounded-xl font-bold transition shadow-sm flex items-center justify-center gap-2"
+            >
+              <RotateCcw size={20} />
+              Trening: cała talia od nowa
+            </button>
+
+            <button
+              onClick={() => setView('roadmap')}
+              className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-4 rounded-xl font-bold transition flex items-center justify-center gap-2 mt-2"
+            >
+              <ArrowLeft size={20} />
+              Zostaw na później (Powrót do mapy)
+            </button>
           </div>
         </div>
       </div>
@@ -849,7 +1016,9 @@ function App() {
           <Trophy className="mx-auto h-20 w-20 text-yellow-400 mb-6" />
           <h2 className="text-3xl font-black text-slate-800 mb-2">Znakomicie!</h2>
           <p className="text-slate-500 mb-8">Utrzymujesz algorytm w idealnym stanie. Passa rośnie!</p>
-          <button onClick={() => setView('roadmap')} className="w-full bg-slate-900 text-white px-6 py-4 rounded-xl font-bold text-lg hover:bg-black transition shadow-lg flex items-center justify-center gap-2">Wróć do Mapy Planu</button>
+          <button onClick={() => setView('roadmap')} className="w-full bg-slate-900 text-white px-6 py-4 rounded-xl font-bold text-lg hover:bg-black transition shadow-lg flex items-center justify-center gap-2">
+             Wróć do Mapy Planu
+          </button>
         </div>
       </div>
     );
