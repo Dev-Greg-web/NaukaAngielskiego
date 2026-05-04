@@ -928,19 +928,51 @@ useEffect(() => {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 pt-20">
         <TopBar />
-        <div className="bg-white p-10 rounded-3xl shadow-xl text-center max-w-md w-full">
-          <h2 className="text-3xl font-black mb-6">Koniec Sesji</h2>
-          <div className="flex gap-4 justify-center mb-8">
-            <div className="bg-emerald-50 text-emerald-700 p-4 rounded-xl text-center flex-1 font-bold">Umiem<br/><span className="text-2xl">{quickKnown.length}</span></div>
-            <div className="bg-red-50 text-red-700 p-4 rounded-xl text-center flex-1 font-bold">Uczę się<br/><span className="text-2xl">{quickLearning.length}</span></div>
+        <div className="bg-white p-10 rounded-3xl shadow-xl text-center max-w-md w-full animate-in fade-in zoom-in duration-300">
+          <div className="mx-auto h-20 w-20 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mb-6">
+            <CheckCircle size={40} />
           </div>
-          {quickLearning.length > 0 && (
-            <button onClick={() => startQuickSession(quickLearning)} className="w-full bg-blue-600 text-white px-6 py-4 rounded-xl font-bold mb-3 hover:bg-blue-700 transition">
-              Powtórz te, których nie umiesz ({quickLearning.length})
+          <h2 className="text-3xl font-black mb-2 text-slate-800">Partia Zakończona!</h2>
+          <p className="text-slate-500 mb-8">Oto Twoje wyniki z tej sesji.</p>
+          
+          <div className="flex gap-4 justify-center mb-8">
+            <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl flex-1 flex flex-col items-center justify-center">
+              <span className="text-sm font-bold text-emerald-600 uppercase tracking-wider mb-1">Umiem</span>
+              <span className="text-3xl font-black text-emerald-700">{quickKnown.length}</span>
+            </div>
+            <div className="bg-red-50 border border-red-100 p-4 rounded-2xl flex-1 flex flex-col items-center justify-center">
+              <span className="text-sm font-bold text-red-600 uppercase tracking-wider mb-1">Uczę się</span>
+              <span className="text-3xl font-black text-red-700">{quickLearning.length}</span>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            {quickLearning.length > 0 && (
+              <button 
+                onClick={() => startQuickSession(quickLearning)} 
+                className="w-full bg-red-500 hover:bg-red-600 text-white px-6 py-4 rounded-xl font-bold transition shadow-sm flex items-center justify-center gap-2 group"
+              >
+                <RotateCcw size={20} className="group-hover:-rotate-180 transition-transform duration-500" />
+                Powtórz błędne ({quickLearning.length})
+              </button>
+            )}
+            
+            <button 
+              onClick={() => startQuickSession(quickDeck)} 
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-4 rounded-xl font-bold transition shadow-sm flex items-center justify-center gap-2"
+            >
+              <RotateCcw size={20} />
+              Cała talia od nowa
             </button>
-          )}
-          <button onClick={() => startQuickSession(quickDeck)} className="w-full bg-slate-200 text-slate-800 px-6 py-4 rounded-xl font-bold mb-3 hover:bg-slate-300">Cała talia od nowa</button>
-          <button onClick={() => setView('home')} className="w-full text-slate-500 py-3 font-semibold">Wróć do menu</button>
+            
+            <button 
+              onClick={() => setView('home')} 
+              className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-4 rounded-xl font-bold transition flex items-center justify-center gap-2 mt-2"
+            >
+              <ArrowLeft size={20} />
+              Wróć do menu
+            </button>
+          </div>
         </div>
       </div>
     );
