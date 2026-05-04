@@ -981,15 +981,45 @@ useEffect(() => {
   // 12. PLAN NAUKI - PODSUMOWANIE
   if (view === 'plan-summary') {
     return (
-      <div className="min-h-screen bg-indigo-600 flex flex-col items-center justify-center p-4 pt-20">
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 pt-20">
         <TopBar />
-        <div className="bg-white p-10 rounded-3xl shadow-2xl text-center max-w-md w-full">
-          <Trophy className="mx-auto h-20 w-20 text-yellow-400 mb-6" />
-          <h2 className="text-3xl font-black text-slate-800 mb-2">Znakomicie!</h2>
-          <p className="text-slate-500 mb-8">Utrzymujesz algorytm w idealnym stanie. Passa rośnie!</p>
-          <button onClick={() => setView('roadmap')} className="w-full bg-slate-900 text-white px-6 py-4 rounded-xl font-bold text-lg hover:bg-black transition shadow-lg">
-            Wróć do Mapy Planu
-          </button>
+        <div className="bg-white p-10 rounded-3xl shadow-xl text-center max-w-md w-full animate-in fade-in zoom-in duration-300">
+          <div className="mx-auto h-20 w-20 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center mb-6">
+            <Trophy size={40} />
+          </div>
+          <h2 className="text-3xl font-black mb-2 text-slate-800">Plan Wykonany!</h2>
+          <p className="text-slate-500 mb-8">Algorytm zaktualizowany. Świetna robota, passa rośnie!</p>
+          
+          <div className="flex gap-4 justify-center mb-8">
+            <div className="bg-orange-50 border border-orange-100 p-4 rounded-2xl flex-1 flex flex-col items-center justify-center">
+              <span className="text-sm font-bold text-orange-600 uppercase tracking-wider mb-1">Passa</span>
+              <span className="text-3xl font-black text-orange-700 flex items-center gap-1">
+                {stats.streak} <Flame size={28} />
+              </span>
+            </div>
+            <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-2xl flex-1 flex flex-col items-center justify-center">
+              <span className="text-sm font-bold text-indigo-600 uppercase tracking-wider mb-1 text-center">Trudne słowa</span>
+              <span className="text-3xl font-black text-indigo-700">{wrongInSession.size}</span>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <button 
+              onClick={() => setView('roadmap')} 
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-4 rounded-xl font-bold transition shadow-sm flex items-center justify-center gap-2"
+            >
+              <Map size={20} />
+              Pokaż Mapę Planu
+            </button>
+            
+            <button 
+              onClick={() => setView('home')} 
+              className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-4 rounded-xl font-bold transition flex items-center justify-center gap-2 mt-2"
+            >
+              <ArrowLeft size={20} />
+              Wróć do menu
+            </button>
+          </div>
         </div>
       </div>
     );
