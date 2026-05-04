@@ -177,28 +177,34 @@ function App() {
   const [newUserPassword, setNewUserPassword] = useState('');
 
   // Zapis sesji w przeglądarce, żeby nie logować się co chwile
-  useEffect(() => {
-    const fetchUserData = async () => {
-      if (user && user.role === 'user') {
-        try {
-          const response = await fetch('/api/login', { // Możesz użyć tego samego endpointu lub stworzyć /api/profile
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ login: user.username, autoLogin: true }) 
-          });
-          const data = await response.json();
-          if (data.success) {
-            setPlanDeck(data.planDeck || []);
-            setPlanSettings(data.planSettings || null);
-            setStats(data.stats || { streak: 0, lastStudyDate: null });
-          }
-        } catch (err) {
-          console.error("Nie udało się odświeżyć danych z serwera");
+  // Ten kod sprawi, że po F5 dane wrócą z bazy do Reacta
+useEffect(() => {
+  const refreshData = async () => {
+    // Sprawdzamy, czy w pamięci przeglądarki jest zapisany użytkownik
+    if (user && user.role === 'user') {
+      try {
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          // Wysyłamy login, żeby Flask wiedział czyje dane wyciągnąć z bazy
+          body: JSON.stringify({ login: user.username, password: "" }) 
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+          // Tutaj React "przypomina" sobie Twój plan z bazy danych
+          setPlanDeck(data.planDeck || []);
+          setPlanSettings(data.planSettings || null);
+          setStats(data.stats || { streak: 0, lastStudyDate: null });
         }
+      } catch (err) {
+        console.error("Błąd automatycznego wczytywania danych:", err);
       }
-    };
-  fetchUserData();
-}, []);
+    }
+  };
+
+  refreshData();
+}, []); // Puste nawiasy [] gwarantują, że to odpali się tylko raz przy starcie
 
   // ==========================================
   // KOMUNIKACJA Z BACKENDEM (FLASK)
