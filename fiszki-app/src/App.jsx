@@ -180,13 +180,11 @@ function App() {
   // Ten kod sprawi, że po F5 dane wrócą z bazy do Reacta
 useEffect(() => {
   const refreshData = async () => {
-    // Sprawdzamy, czy w pamięci przeglądarki jest zapisany użytkownik
-    if (user && user.role === 'user') {
+    if (user) { // Usunęliśmy blokadę role === 'user'
       try {
         const response = await fetch('/api/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          // Wysyłamy login, żeby Flask wiedział czyje dane wyciągnąć z bazy
           body: JSON.stringify({ login: user.username, password: "" }) 
         });
         
@@ -210,27 +208,26 @@ useEffect(() => {
   // KOMUNIKACJA Z BACKENDEM (FLASK)
   // ==========================================
   const syncToServer = async (newDeck, newSettings, newStats) => {
-    if (user && user.role === 'user') {
-      try {
-        await fetch('/api/sync', {
-          method: 'POST',
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json' // To naprawia błąd JSON input!
-          },
-          body: JSON.stringify({
-            username: user.username,
-            planDeck: newDeck,
-            planSettings: newSettings,
-            stats: newStats
-          })
-        });
-      } catch (err) {
-        console.error("Błąd synchronizacji z serwerem:", err);
-      }
+  if (user) { // Teraz admin też będzie synchronizował dane do bazy!
+    try {
+      await fetch('/api/sync', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          username: user.username,
+          planDeck: newDeck,
+          planSettings: newSettings,
+          stats: newStats
+        })
+      });
+    } catch (err) {
+      console.error("Błąd synchronizacji:", err);
     }
-  };
-
+  }
+};
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoginError('');
