@@ -22,7 +22,6 @@ import FuturePerfectContinuous from './grammar/FuturePerfectContinuous';
 
 import PronunciationGuide from './PronunciationGuide';
 
-import Conditionals from './grammar/Conditionals'; // Na razie możesz stworzyć pusty plik, żeby nie było błędu
 import ZeroConditional from './grammar/ZeroConditional';
 import FirstConditional from './grammar/FirstConditional';
 import SecondConditional from './grammar/SecondConditional';
