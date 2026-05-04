@@ -142,28 +142,24 @@ function PronunciationPractice({ onBack }) {
 }
 
 function App() {
-  // POBIERANIE ZMIENNYCH Z PLIKU .env (Vite)
   const ADMIN_USERNAME = import.meta.env.VITE_ADMIN_USERNAME;
   const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD;
 
-  // --- STANY: BAZA UŻYTKOWNIKÓW ---
-  const [registeredUsers, setRegisteredUsers] = useState(() => JSON.parse(localStorage.getItem('fiszki_users_db')) || []);
-
-  // --- STANY: LOGOWANIE ---
-  const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('fiszki_user')) || null);
+  // --- STANY: LOGOWANIE (Tylko sesja zostaje w localStorage) ---
+  const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('fiszki_session')) || null);
   const [loginInput, setLoginInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [loginError, setLoginError] = useState('');
 
-  // --- STANY: APLIKACJA ---
+  // --- STANY: APLIKACJA (Puste na start, pobierane z bazy) ---
   const [view, setView] = useState('home'); 
   const [quickDeck, setQuickDeck] = useState([]);
   const [quickKnown, setQuickKnown] = useState([]);
   const [quickLearning, setQuickLearning] = useState([]);
   
-  const [planDeck, setPlanDeck] = useState(() => JSON.parse(localStorage.getItem('fiszki_plan_deck')) || []);
-  const [planSettings, setPlanSettings] = useState(() => JSON.parse(localStorage.getItem('fiszki_plan_settings')) || null);
-  const [stats, setStats] = useState(() => JSON.parse(localStorage.getItem('fiszki_stats')) || { streak: 0, lastStudyDate: null });
+  const [planDeck, setPlanDeck] = useState([]);
+  const [planSettings, setPlanSettings] = useState(null);
+  const [stats, setStats] = useState({ streak: 0, lastStudyDate: null });
 
   const [activeGrammar, setActiveGrammar] = useState(null);
   const [studyDirection, setStudyDirection] = useState('frontToBack');
@@ -176,39 +172,74 @@ function App() {
   const fileInputRef = useRef(null);
   const planFileInputRef = useRef(null);
 
-  // --- STANY: ZARZĄDZANIE UŻYTKOWNIKAMI (ADMIN) ---
+  // Admin states
   const [newUsername, setNewUsername] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('');
 
+  // Zapis sesji w przeglądarce, żeby nie logować się co chwile
   useEffect(() => {
-    localStorage.setItem('fiszki_plan_deck', JSON.stringify(planDeck));
-    localStorage.setItem('fiszki_plan_settings', JSON.stringify(planSettings));
-    localStorage.setItem('fiszki_stats', JSON.stringify(stats));
-    localStorage.setItem('fiszki_user', JSON.stringify(user));
-    localStorage.setItem('fiszki_users_db', JSON.stringify(registeredUsers));
-  }, [planDeck, planSettings, stats, user, registeredUsers]);
-
-  // ==========================================
-  // LOGIKA - LOGOWANIE I REJESTRACJA
-  // ==========================================
-  const handleLogin = (e) => {
-    e.preventDefault();
-    
-    // Sprawdzanie czy to administrator (dane z .env)
-    if (loginInput === ADMIN_USERNAME && passwordInput === ADMIN_PASSWORD) {
-      setUser({ username: ADMIN_USERNAME, role: 'admin' });
-      setLoginError('');
-      return;
-    }
-
-    // Sprawdzanie czy to zwykły zarejestrowany użytkownik
-    const foundUser = registeredUsers.find(u => u.username === loginInput && u.password === passwordInput);
-    
-    if (foundUser) {
-      setUser({ username: foundUser.username, role: 'user' });
-      setLoginError('');
+    if (user) {
+      localStorage.setItem('fiszki_session', JSON.stringify(user));
     } else {
-      setLoginError('Błędny login lub hasło. Poproś administratora o utworzenie konta.');
+      localStorage.removeItem('fiszki_session');
+    }
+  }, [user]);
+
+  // ==========================================
+  // KOMUNIKACJA Z BACKENDEM (FLASK)
+  // ==========================================
+  const syncToServer = async (newDeck, newSettings, newStats) => {
+    if (user && user.role === 'user') {
+      try {
+        await fetch('/api/sync', {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json' // To naprawia błąd JSON input!
+          },
+          body: JSON.stringify({
+            username: user.username,
+            planDeck: newDeck,
+            planSettings: newSettings,
+            stats: newStats
+          })
+        });
+      } catch (err) {
+        console.error("Błąd synchronizacji z serwerem:", err);
+      }
+    }
+  };
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoginError('');
+    
+    try {
+      const response = await fetch('/api/login', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ login: loginInput, password: passwordInput })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setUser({ username: data.username, role: data.role });
+        
+        // Jeśli to uczeń, wczytaj jego dane z SQLite (z Flaska)
+        if (data.role === 'user') {
+          setPlanDeck(data.planDeck || []);
+          setPlanSettings(data.planSettings || null);
+          setStats(data.stats || { streak: 0, lastStudyDate: null });
+        }
+      } else {
+        setLoginError(data.error || 'Błędny login lub hasło.');
+      }
+    } catch (error) {
+      setLoginError('Błąd połączenia z serwerem. Upewnij się, że Flask działa.');
     }
   };
 
@@ -216,33 +247,24 @@ function App() {
     setUser(null);
     setLoginInput('');
     setPasswordInput('');
+    setPlanDeck([]);
+    setPlanSettings(null);
     setView('home');
   };
 
+  // Uwaga: Te funkcje w panelu admina na razie tylko symulują działanie frontendu. 
+  // Aby w pełni działały, będziemy musieli dopisać endpoint '/api/users' we Flasku.
   const handleAddUser = (e) => {
     e.preventDefault();
-    if (!newUsername.trim() || !newUserPassword.trim()) {
-      alert("Podaj login i hasło nowego ucznia.");
-      return;
-    }
-    if (newUsername === ADMIN_USERNAME || registeredUsers.some(u => u.username === newUsername)) {
-      alert("Taki użytkownik już istnieje!");
-      return;
-    }
-    
-    setRegisteredUsers([...registeredUsers, { id: Date.now(), username: newUsername, password: newUserPassword }]);
-    setNewUsername('');
-    setNewUserPassword('');
+    alert("Funkcja dodawania użytkowników będzie podpięta pod SQLite w następnym kroku!");
   };
 
   const handleDeleteUser = (id) => {
-    if (window.confirm("Na pewno usunąć tego użytkownika?")) {
-      setRegisteredUsers(registeredUsers.filter(u => u.id !== id));
-    }
+    alert("Funkcja usuwania użytkowników będzie podpięta pod SQLite w następnym kroku!");
   };
 
   // ==========================================
-  // POZOSTAŁA LOGIKA (Szybka Sesja, Plan Nauki)
+  // LOGIKA FISZEK (Z dodaną synchronizacją)
   // ==========================================
   const handleQuickUpload = (e) => {
     const file = e.target.files[0];
@@ -303,8 +325,13 @@ function App() {
       ...card,
       dayAssigned: Math.floor(index / wordsPerDay) + 1
     }));
+    
+    const newSettings = { targetDays, currentDay: 1, wordsPerDay };
     setPlanDeck(arrangedDeck);
-    setPlanSettings({ targetDays, currentDay: 1, wordsPerDay });
+    setPlanSettings(newSettings);
+    
+    syncToServer(arrangedDeck, newSettings, stats); // Zapis do bazy!
+    
     setImportedCards([]);
     setView('roadmap');
   };
@@ -330,36 +357,51 @@ function App() {
       } else {
         let newStep = wrongInSession.has(currentCard.id) ? 1 : currentCard.step + 1;
         if (newStep >= INTERVALS.length) newStep = INTERVALS.length - 1;
-        setPlanDeck(prev => prev.map(c => c.id === currentCard.id ? { ...c, step: newStep, nextReview: addDaysStr(INTERVALS[newStep]) } : c));
-        setSessionQueue(prev => {
-          const newQ = prev.slice(1);
-          if (newQ.length === 0) finishPlanSession();
-          return newQ;
-        });
+        
+        const updatedDeck = planDeck.map(c => c.id === currentCard.id ? { ...c, step: newStep, nextReview: addDaysStr(INTERVALS[newStep]) } : c);
+        setPlanDeck(updatedDeck);
+        
+        const newQueue = sessionQueue.slice(1);
+        setSessionQueue(newQueue);
+        
+        if (newQueue.length === 0) {
+          finishPlanSession(updatedDeck);
+        } else {
+          syncToServer(updatedDeck, planSettings, stats); // Bieżący zapis dla bezpieczeństwa
+        }
       }
     }, 150);
   };
 
-  const finishPlanSession = () => {
+  const finishPlanSession = (currentDeck) => {
     const todayStr = getTodayStr();
-    let { streak, lastStudyDate } = stats;
-    if (lastStudyDate !== todayStr) {
-      if (lastStudyDate === addDaysStr(-1)) streak += 1;
-      else streak = 1;
-      setStats({ streak, lastStudyDate: todayStr });
+    let newStats = { ...stats };
+    
+    if (stats.lastStudyDate !== todayStr) {
+      if (stats.lastStudyDate === addDaysStr(-1)) newStats.streak += 1;
+      else newStats.streak = 1;
+      newStats.lastStudyDate = todayStr;
+      setStats(newStats);
     }
-    const unlearnedCurrentDay = planDeck.filter(c => c.dayAssigned === planSettings.currentDay && c.step === 0);
+
+    let newSettings = { ...planSettings };
+    const unlearnedCurrentDay = currentDeck.filter(c => c.dayAssigned === planSettings.currentDay && c.step === 0);
     if (unlearnedCurrentDay.length === 0 && planSettings.currentDay < planSettings.targetDays) {
-      setPlanSettings(prev => ({ ...prev, currentDay: prev.currentDay + 1 }));
+      newSettings.currentDay += 1;
+      setPlanSettings(newSettings);
     }
+    
+    syncToServer(currentDeck, newSettings, newStats); // Zapis końcowy
     setView('plan-summary');
   };
 
   const handleResetPlan = () => {
-    if (window.confirm("Czy na pewno chcesz zresetować i usunąć cały plan nauki? Zmian nie można cofnąć.")) {
+    if (window.confirm("Czy na pewno chcesz zresetować i usunąć cały plan nauki?")) {
       setView('home'); 
       setPlanSettings(null); 
       setPlanDeck([]);
+      setStats({ streak: 0, lastStudyDate: null });
+      syncToServer([], null, { streak: 0, lastStudyDate: null }); // Czyszczenie bazy
     }
   };
 
@@ -367,7 +409,7 @@ function App() {
   // RENDEROWANIE WIDOKÓW
   // ==========================================
 
-  // 0. EKRAN LOGOWANIA (STRICT MODE)
+  // 0. EKRAN LOGOWANIA
   if (!user) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 relative overflow-hidden">
@@ -378,7 +420,7 @@ function App() {
             <Lock className="text-indigo-600" size={40} />
           </div>
           <h1 className="text-3xl font-black text-center text-slate-800 mb-2">Platforma Nauki</h1>
-          <p className="text-center text-slate-500 mb-8">Dostęp tylko dla zweryfikowanych użytkowników.</p>
+          <p className="text-center text-slate-500 mb-8">Dostęp po weryfikacji w chmurze (Flask).</p>
           
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
@@ -426,7 +468,7 @@ function App() {
     );
   }
 
-  // WSPÓLNY HEADER Z OPCJĄ WYLOGOWANIA
+  // WSPÓLNY HEADER
   const TopBar = () => (
     <div className="w-full bg-white border-b border-slate-200 p-4 flex justify-between items-center shadow-sm fixed top-0 z-50">
       <div className="flex items-center gap-2 font-bold text-slate-700">
@@ -439,7 +481,7 @@ function App() {
     </div>
   );
 
-  // 0.5 PANEL ADMINA (Z ZARZĄDZANIEM UŻYTKOWNIKAMI)
+  // 0.5 PANEL ADMINA
   if (view === 'admin-panel' && user.role === 'admin') {
     return (
       <div className="min-h-screen bg-slate-50 pt-20 p-6 md:p-12 pb-24">
@@ -453,12 +495,11 @@ function App() {
             <div className="p-4 bg-red-100 text-red-600 rounded-2xl"><Shield size={40} /></div>
             <div>
               <h1 className="text-4xl font-black text-slate-800">Panel Administratora</h1>
-              <p className="text-slate-500 text-lg">Zarządzaj kontami uczniów i systemem.</p>
+              <p className="text-slate-500 text-lg">Zarządzaj kontami uczniów i systemem (SQL).</p>
             </div>
           </div>
 
           <div className="grid md:grid-cols-2 gap-6 mb-8">
-            {/* Sekcja: Użytkownicy */}
             <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 flex flex-col">
               <h2 className="text-xl font-black text-slate-800 mb-4 flex items-center gap-2">
                 <Users className="text-indigo-500"/> Konta Uczniów
@@ -470,56 +511,19 @@ function App() {
                   <input type="text" value={newUsername} onChange={(e) => setNewUsername(e.target.value)} placeholder="Login ucznia" className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none" />
                   <input type="text" value={newUserPassword} onChange={(e) => setNewUserPassword(e.target.value)} placeholder="Hasło ucznia" className="w-full border border-slate-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none" />
                   <button type="submit" className="bg-indigo-600 text-white font-bold py-2 rounded-xl hover:bg-indigo-700 transition flex items-center justify-center gap-2">
-                    <UserPlus size={18} /> Dodaj
+                    <UserPlus size={18} /> Dodaj do SQLite
                   </button>
                 </div>
               </form>
-
-              <div className="flex-grow">
-                <h3 className="text-sm font-bold text-slate-600 mb-3 uppercase tracking-wider">Lista zarejestrowanych</h3>
-                {registeredUsers.length === 0 ? (
-                  <p className="text-slate-400 text-sm">Brak utworzonych kont. Dodaj pierwszego ucznia.</p>
-                ) : (
-                  <ul className="space-y-2">
-                    {registeredUsers.map(u => (
-                      <li key={u.id} className="flex justify-between items-center bg-white border border-slate-100 p-3 rounded-xl shadow-sm">
-                        <div className="font-bold text-slate-700">{u.username} <span className="text-xs text-slate-400 font-normal ml-2">Hasło: {u.password}</span></div>
-                        <button onClick={() => handleDeleteUser(u.id)} className="text-red-400 hover:text-red-600 p-1">
-                          <Trash2 size={18} />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+              <p className="text-slate-400 text-sm italic">Wizualizacja bazy z Flaska w przygotowaniu...</p>
             </div>
 
-            {/* Sekcja: Statystyki i System */}
             <div className="flex flex-col gap-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-                  <h3 className="text-slate-500 font-bold mb-2 uppercase tracking-wider text-sm">Zapisane Fiszki w Planie</h3>
-                  <p className="text-4xl font-black text-indigo-600">{planDeck.length}</p>
-                </div>
-                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-                  <h3 className="text-slate-500 font-bold mb-2 uppercase tracking-wider text-sm">Twoja Passa</h3>
-                  <p className="text-4xl font-black text-orange-500">{stats.streak} dni</p>
-                </div>
-              </div>
-
               <div className="bg-red-50 border border-red-200 rounded-3xl p-6 h-full">
-                <h2 className="text-xl font-black text-red-800 mb-2">Strefa Niebezpieczna</h2>
-                <p className="text-red-600 text-sm mb-6">Poniższe akcje usuną dane przypisane do profilu (fiszki, postęp). Nie wpływa to na konta użytkowników.</p>
-                
+                <h2 className="text-xl font-black text-red-800 mb-2">Zarządzanie Cachingiem</h2>
+                <p className="text-red-600 text-sm mb-6">Wykorzystywane tylko do testowania aplikacji przez admina.</p>
                 <button 
-                  onClick={() => {
-                    if(window.confirm("Zresetować Twój postęp nauki i wyczyścić plan?")) {
-                      setPlanDeck([]);
-                      setPlanSettings(null);
-                      setStats({ streak: 0, lastStudyDate: null });
-                      alert("Dane planu nauki wyczyszczone.");
-                    }
-                  }}
+                  onClick={handleResetPlan}
                   className="w-full flex justify-center items-center gap-2 bg-white text-red-600 border border-red-200 hover:bg-red-600 hover:text-white px-6 py-3 rounded-xl font-bold transition shadow-sm"
                 >
                   <Trash2 size={20} /> Wyczyść mój algorytm i fiszki
@@ -546,7 +550,7 @@ function App() {
                 <div className="h-16 w-16 bg-white/20 rounded-2xl flex items-center justify-center"><Shield size={32} /></div>
                 <div>
                   <h2 className="text-2xl font-bold mb-1">Panel Admina</h2>
-                  <p className="text-red-100">Kliknij tutaj, aby zarządzać kontami i systemem.</p>
+                  <p className="text-red-100">Kliknij tutaj, aby zarządzać kontami i systemem (SQL).</p>
                 </div>
               </div>
               <ChevronRight size={32} className="opacity-50" />
@@ -562,7 +566,7 @@ function App() {
           <div className="bg-indigo-600 text-white p-8 rounded-3xl shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all cursor-pointer relative overflow-hidden flex flex-col h-full" onClick={() => planSettings ? setView('roadmap') : setView('plan-upload')}>
             <div className="h-16 w-16 bg-indigo-500/50 rounded-2xl flex items-center justify-center mb-6"><Map size={32} /></div>
             <h2 className="text-2xl font-bold mb-3">Plan Nauki (SRS)</h2>
-            <p className="text-indigo-100 mb-6 flex-grow">Wrzuć plik 1000 słów i określ czas. Aplikacja stworzy plan powtórek na każdy dzień.</p>
+            <p className="text-indigo-100 mb-6 flex-grow">Wrzuć plik 1000 słów i określ czas. Aplikacja stworzy plan powtórek i zsynchronizuje z Pythonem.</p>
             {planSettings && <div className="bg-indigo-800/40 px-4 py-2 rounded-xl text-sm font-semibold inline-flex items-center gap-2 mt-auto w-fit">Kontynuuj plan ({planSettings.currentDay}/{planSettings.targetDays})</div>}
           </div>
 
