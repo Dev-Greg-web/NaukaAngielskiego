@@ -4,7 +4,15 @@ import requests
 
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 
-MODELS = [
+# 1. NOWOŚĆ: Mapowanie opcji z Reacta na Twoje własne modele
+MODELS_MAP = {
+    "universal": "openai/gpt-oss-120b:free",
+    "fast": "qwen/qwen3-coder:free",
+    "pro": "google/gemma-4-31b-it:free"
+}
+
+# 2. Twoja lista modeli jako awaryjne (Fallback)
+FALLBACK_MODELS = [
     "openai/gpt-oss-120b:free",
     "google/gemma-4-31b-it:free",
     "qwen/qwen3-coder:free"
@@ -19,7 +27,8 @@ Twoje zasady:
 5. Zawsze odpowiadasz po polsku, chyba że podajesz angielskie przykłady.
 Rozpocznij odpowiedź od razu, nie musisz się witać za każdym razem."""
 
-def get_bot_response_stream(user_message):
+# 3. KLUCZOWA ZMIANA: dodajemy drugi argument (model_type="universal")
+def get_bot_response_stream(user_message, model_type="universal"):
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "HTTP-Referer": "https://naukaangielskiego.onrender.com",
@@ -27,7 +36,13 @@ def get_bot_response_stream(user_message):
         "Content-Type": "application/json"
     }
 
-    for model in MODELS:
+    # Wybieramy główny model z mapy na podstawie wyboru użytkownika w React
+    primary_model = MODELS_MAP.get(model_type, MODELS_MAP["universal"])
+    
+    # Ustawiamy kolejność: najpierw wybrany model, potem reszta jako ratunek
+    models_to_try = [primary_model] + [m for m in FALLBACK_MODELS if m != primary_model]
+
+    for model in models_to_try:
         payload = {
             "model": model,
             "messages": [
@@ -73,4 +88,4 @@ def get_bot_response_stream(user_message):
             continue
 
     # Jeśli wszystko padnie:
-    yield "Ups! Moje zwoje mózgowe AI są przeciążone. Spróbuj jeszcze raz."
+    yield "Ups! Moje zwoje mózgowe AI są przeciążone. Spróbuj zmienić model lub zapytaj ponownie."
