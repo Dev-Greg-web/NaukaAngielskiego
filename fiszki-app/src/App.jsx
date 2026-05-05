@@ -5,32 +5,31 @@ import {
   Zap, Map, ArrowLeft, Trophy, CheckCircle, Lock, BookOpen, 
   Library, ChevronRight, Volume2, Ear, ArrowRightLeft, 
   Shield, User, LogOut, Key, Trash2, UserPlus, Users, Settings,
-  Bot // DODANO: Ikonę Bota
+  Bot
 } from 'lucide-react';
 
-import PresentSimple from './grammar/PresentSimple';
-import PastSimple from './grammar/PastSimple';
-import PresentPerfect from './grammar/PresentPerfect';
-import PresentContinuous from './grammar/PresentContinuous';
-import PastContinuous from './grammar/PastContinuous';
-import FutureForms from './grammar/FutureForms';
-import PastPerfect from './grammar/PastPerfect';
-import PresentPerfectContinuous from './grammar/PresentPerfectContinuous';
-import FutureContinuous from './grammar/FutureContinuous';
-import FuturePerfect from './grammar/FuturePerfect';
-import PastPerfectContinuous from './grammar/PastPerfectContinuous';
-import FuturePerfectContinuous from './grammar/FuturePerfectContinuous';
+import PresentSimple from './components/PresentSimple';
+import PastSimple from './components/PastSimple';
+import PresentPerfect from './components/PresentPerfect';
+import PresentContinuous from './components/PresentContinuous';
+import PastContinuous from './components/PastContinuous';
+import FutureForms from './components/FutureForms';
+import PastPerfect from './components/PastPerfect';
+import PresentPerfectContinuous from './components/PresentPerfectContinuous';
+import FutureContinuous from './components/FutureContinuous';
+import FuturePerfect from './components/FuturePerfect';
+import PastPerfectContinuous from './components/PastPerfectContinuous';
+import FuturePerfectContinuous from './components/FuturePerfectContinuous';
 
-import PronunciationGuide from './PronunciationGuide';
+import PronunciationGuide from './components/PronunciationGuide';
 
-import ZeroConditional from './grammar/ZeroConditional';
-import FirstConditional from './grammar/FirstConditional';
-import SecondConditional from './grammar/SecondConditional';
-import ThirdConditional from './grammar/ThirdConditional';
-import PassiveVoice from './grammar/PassiveVoice';
+import ZeroConditional from './components/ZeroConditional';
+import FirstConditional from './components/FirstConditional';
+import SecondConditional from './components/SecondConditional';
+import ThirdConditional from './components/ThirdConditional';
+import PassiveVoice from './components/PassiveVoice';
 
-// DODANO: Nasz nowy komponent Bota
-import ChatBot from './grammar/ChatBot';
+import ChatBot from './components/ChatBot';
 
 const INTERVALS = [0, 1, 3, 7, 14, 30, 90];
 const getTodayStr = () => new Date().toISOString().split('T')[0];
@@ -553,7 +552,7 @@ function App() {
                   <h2 className="text-2xl font-bold">Zapytaj Nauczyciela</h2>
                   <span className="bg-yellow-400 text-yellow-900 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">Nowość</span>
                 </div>
-                <p className="text-emerald-50">Wirtualny asystent Gładysz Greg odpowie na każde Twoje pytanie o czasy i gramatykę!</p>
+                <p className="text-emerald-50">Wirtualny asystent GregBot odpowie na każde Twoje pytanie o czasy i gramatykę!</p>
               </div>
             </div>
             <ChevronRight size={32} className="opacity-50 group-hover:opacity-100 group-hover:translate-x-2 transition-all" />
@@ -1055,7 +1054,7 @@ function App() {
     );
   }
 
-  // WIDOK BOTA GŁADYSZA GREGA
+  
   if (view === 'chatbot') {
     return (
       <div className="min-h-screen bg-slate-50 pt-20 p-6 md:p-12">
