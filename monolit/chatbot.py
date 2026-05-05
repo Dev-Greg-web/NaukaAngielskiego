@@ -1,10 +1,10 @@
 import os
 import requests
 
-# Twój klucz API
+# Twój klucz API (Zgodnie z życzeniem - bez zmian)
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 
-# System Fallback
+# System Fallback (Zgodnie z życzeniem - Twoje modele)
 MODELS = [
     "openai/gpt-oss-120b:free",
     "google/gemma-4-31b-it:free",
@@ -28,6 +28,8 @@ def get_bot_response(user_message):
         "Content-Type": "application/json"
     }
 
+    error_logs = [] # Tu zbieramy błędy jak do koszyka
+
     for model in MODELS:
         payload = {
             "model": model,
@@ -38,7 +40,7 @@ def get_bot_response(user_message):
         }
 
         try:
-            # ZWIĘKSZONY TIMEOUT DO 45 SEKUND - modele AI potrzebują czasu na długie odpowiedzi!
+            # ZWIĘKSZONY TIMEOUT DO 45 SEKUND
             response = requests.post(
                 "https://openrouter.ai/api/v1/chat/completions", 
                 headers=headers, 
@@ -46,20 +48,27 @@ def get_bot_response(user_message):
                 timeout=45
             )
             
-            response.raise_for_status() 
+            # Jeśli OpenRouter odrzuci zapytanie (np. zły klucz, limit, brak kredytów)
+            if response.status_code != 200:
+                error_logs.append(f"[{model}] Błąd HTTP {response.status_code}: {response.text}")
+                continue
             
             data = response.json()
-            ai_reply = data['choices'][0]['message']['content']
             
-            return ai_reply
-            
-        except requests.exceptions.RequestException as e:
-            # Drukujemy bezpieczny błąd sieciowy
-            print(f"--- BŁĄD MODELU {model} ---")
-            if hasattr(e, 'response') and e.response is not None:
-                print(e.response.text) # Zobaczymy dokładnie, co mówi OpenRouter!
-            continue
-        except Exception:
+            # Bezpieczne wyciąganie odpowiedzi z JSON-a
+            if 'choices' in data and len(data['choices']) > 0:
+                return data['choices'][0]['message']['content']
+            else:
+                error_logs.append(f"[{model}] Dziwna odpowiedź bez tekstu: {str(data)}")
+                continue
+                
+        except Exception as e:
+            # Jeśli wywali się np. przez przekroczenie 45 sekund (ReadTimeout)
+            error_logs.append(f"[{model}] Wyrzucił błąd w Pythonie: {str(e)}")
             continue
 
-    return "Ups! Wygląda na to, że wszystkie moje zwoje mózgowe AI są teraz przeciążone. Daj mi chwilę i spróbuj zapytać ponownie!"
+    # Jeśli pętla sprawdziła wszystkie 3 modele i nic nie zadziałało, 
+    # wysyłamy zebrany raport błędów do frontendu!
+    raport = "\n\n--- 🚨 DEBUG INFO DLA GREGA 🚨 ---\n" + "\n\n".join(error_logs)
+    
+    return "Serwery AI odmówiły posłuszeństwa. Jako programista, spójrz na błędy poniżej:" + raport
