@@ -3,13 +3,13 @@ import requests
 
 # 1. Twój klucz API (Podmień ten tekst na swój prawdziwy klucz do testów lokalnych)
 # Jak wrzucisz na Rendera, użyjemy zmiennych środowiskowych, żeby było bezpiecznie!
-OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "WLEJ_TUTAJ_SWOJ_KLUCZ_Z_OPENROUTER")
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 
 # 2. Lista modeli (System Fallback). Jak jeden zawiedzie, wjeżdża następny.
 MODELS = [
-    "google/gemini-2.0-flash-lite-preview-02-05:free", # Superszybki model od Google
-    "meta-llama/llama-3-8b-instruct:free",             # Świetny model od Mety
-    "mistralai/mistral-7b-instruct:free"               # Bardzo stabilny model Mistral
+    "poolside/laguna-m.1:free", 
+    "baidu/qianfan-ocr-fast:free",             
+    "liquid/lfm-2.5-1.2b-thinking:free"
 ]
 
 # 3. System Prompt - To jest dusza i charakter Twojego bota!
