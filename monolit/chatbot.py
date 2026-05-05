@@ -6,7 +6,7 @@ OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 
 MODELS_MAP = {
     "universal": "openai/gpt-oss-120b:free",
-    "fast": "baidu/qianfan-ocr-fast:free",
+    "fast": "qwen/qwen3-coder:free",
     "pro": "google/gemma-4-31b-it:free"
 }
 
