@@ -67,8 +67,9 @@ function SpeechPractice({ username, onBack }) {
   const speakText = (text) => {
     if (!('speechSynthesis' in window)) return;
     
-    // Zabezpieczenie: usuwamy surowe znaki Markdown przed przeczytaniem na głos
-    const cleanTextToSpeak = text.replace(/[*_#|]/g, '');
+    // MAGIA 1: Wycinamy polskie tłumaczenie z nawiasów *(...)* przed przeczytaniem!
+    // Dzięki temu amerykański lektor nie czyta polskiego tekstu łamiąc sobie język.
+    const cleanTextToSpeak = text.replace(/\*\([\s\S]*?\)\*/g, '').replace(/[*_#|]/g, '').trim();
 
     setIsSpeaking(true);
     const utterance = new SpeechSynthesisUtterance(cleanTextToSpeak);
@@ -88,18 +89,18 @@ function SpeechPractice({ username, onBack }) {
     const newChat = [...conversation, { role: 'user', text: userText }];
     setConversation(newChat);
 
-    // UKRYTA INSTRUKCJA: Zmuszamy bota do naturalnej mowy bez tabelek!
-    const hiddenPrompt = "\n[System: To jest tryb Voice Room. Odpowiedz naturalnie, w 1-2 krótkich zdaniach, tak jakbyś rozmawiał przez telefon. BEZWZGLĘDNY ZAKAZ używania list, tabelek, pogrubień i formatowania Markdown.]";
+    // MAGIA 2: Bezwzględny rygor dla modelu Universal
+    const hiddenPrompt = "\n[System: Tryb Voice Room. 1. ZAWSZE ODPOWIADAJ TYLKO PO ANGIELSKU (1-2 naturalne zdania). 2. Pod spodem ZAWSZE podaj polskie tłumaczenie swojej odpowiedzi, otoczone gwiazdkami i nawiasami, dokładnie w tym formacie: *(tutaj polskie tłumaczenie)*. Żadnych tabelek i list.]";
 
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          message: userText + hiddenPrompt, // Wysyłamy wiadomość + ukryty nakaz
-          modelType: 'fast', 
+          message: userText + hiddenPrompt, 
+          modelType: 'universal', // ZMIANA NA UNIVERSAL
           history: newChat.map(msg => ({ sender: msg.role, text: msg.text })).slice(-6), 
-          settings: { language: 'en', tone: 'chill', length: 'short', memory: 3 }
+          settings: { language: 'en', tone: 'normal', length: 'short', memory: 3 }
         }) 
       });
       
@@ -112,7 +113,6 @@ function SpeechPractice({ username, onBack }) {
         if (done) break;
         botReply += decoder.decode(value, { stream: true });
         
-        // Aktualizujemy na żywo
         setConversation(prev => {
             const updated = [...prev];
             if (updated[updated.length - 1].role === 'bot') {
@@ -146,7 +146,7 @@ function SpeechPractice({ username, onBack }) {
         <div className="bg-orange-500 p-6 text-white text-center shadow-md z-10 relative">
           <div className="absolute top-6 right-6 opacity-30"><Volume2 size={48} /></div>
           <h2 className="text-3xl font-black mb-2 relative z-10">Voice Room</h2>
-          <p className="text-orange-100 font-medium relative z-10">Mów po angielsku. Greg odpowie głosem.</p>
+          <p className="text-orange-100 font-medium relative z-10">Mów po angielsku. Greg odpowie głosem i tekstem.</p>
         </div>
 
         <div className="flex-1 p-6 overflow-y-auto space-y-6 bg-slate-50 flex flex-col justify-end pb-12">
@@ -165,13 +165,14 @@ function SpeechPractice({ username, onBack }) {
                   ? 'bg-slate-800 text-white rounded-br-none shadow-sm' 
                   : 'bg-white border border-orange-100 text-slate-800 rounded-bl-none shadow-md'
               }`}>
-                {/* NAPRAWA: Zabezpieczenie renderowania */}
                 {msg.role === 'bot' ? (
                   <ReactMarkdown 
                     remarkPlugins={[remarkGfm]}
                     className="prose prose-sm prose-orange max-w-none break-words"
                     components={{
-                      p: ({node, ...props}) => <p className="mb-2 last:mb-0 leading-relaxed" {...props} />
+                      p: ({node, ...props}) => <p className="mb-1 last:mb-0 text-base font-medium leading-relaxed text-slate-800" {...props} />,
+                      // MAGIA 3: Zamieniamy `*(...)*` na blokową, szarą kursywę ze zmniejszonym opacity!
+                      em: ({node, ...props}) => <em className="block text-sm text-slate-500 opacity-70 italic mt-2" {...props} />
                     }}
                   >
                     {msg.text}
@@ -186,7 +187,7 @@ function SpeechPractice({ username, onBack }) {
           {isThinking && (
             <div className="flex justify-start">
               <div className="bg-white border border-orange-100 p-4 rounded-2xl rounded-bl-none shadow-sm text-slate-500 flex items-center gap-2">
-                <Loader2 className="animate-spin text-orange-500" size={18} /> Greg myśli...
+                <Loader2 className="animate-spin text-orange-500" size={18} /> Greg analizuje (Universal)...
               </div>
             </div>
           )}
