@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://learnenglish-jyn5.onrender.com/sitemap.xml
