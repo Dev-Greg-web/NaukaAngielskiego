@@ -53,10 +53,13 @@ def get_bot_response(user_message):
             
             return ai_reply
             
+        except requests.exceptions.RequestException as e:
+            # Drukujemy bezpieczny błąd sieciowy
+            print(f"--- BŁĄD MODELU {model} ---")
+            if hasattr(e, 'response') and e.response is not None:
+                print(e.response.text) # Zobaczymy dokładnie, co mówi OpenRouter!
+            continue
         except Exception:
-            # Ciche przejście do następnego modelu bez "printowania" błędów.
-            # Zapobiega to crashowaniu konsoli Windowsa (UnicodeEncodeError).
             continue
 
-    # Zabezpieczenie ostateczne
     return "Ups! Wygląda na to, że wszystkie moje zwoje mózgowe AI są teraz przeciążone. Daj mi chwilę i spróbuj zapytać ponownie!"
