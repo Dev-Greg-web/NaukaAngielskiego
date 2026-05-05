@@ -5,9 +5,10 @@ import {
   Zap, Map, ArrowLeft, Trophy, CheckCircle, Lock, BookOpen, 
   Library, ChevronRight, Volume2, Ear, ArrowRightLeft, 
   Shield, User, LogOut, Key, Trash2, UserPlus, Users, Settings,
-  Bot
+  Bot, Mic // <-- DODANO Mic
 } from 'lucide-react';
 
+// IMPORTY KOMPONENTÓW GRAMATYKI (zakładam, że masz je u siebie)
 import PresentSimple from './components/PresentSimple';
 import PastSimple from './components/PastSimple';
 import PresentPerfect from './components/PresentPerfect';
@@ -30,8 +31,11 @@ import ThirdConditional from './components/ThirdConditional';
 import PassiveVoice from './components/PassiveVoice';
 
 import ChatBot from './components/ChatBot';
+import SpeechPractice from './components/SpeechPractice';
 
-const INTERVALS = [0, 1, 3, 7, 14, 30, 90];
+// NOWOŚĆ: Importujemy nasz algorytm SM-2!
+import { calculateSM2 } from './utils/sm2';
+
 const getTodayStr = () => new Date().toISOString().split('T')[0];
 const addDaysStr = (days) => {
   const d = new Date(); d.setDate(d.getDate() + days);
@@ -215,6 +219,7 @@ function App() {
     refreshData();
   }, []);
 
+  // OBSŁUGA KLAWIATURY (AKTUALIZACJA DLA SM-2)
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (view !== 'quick-session' && view !== 'plan-session') return;
@@ -228,8 +233,11 @@ function App() {
           e.preventDefault();
           if (!isFlipped) setIsFlipped(true);
         } else if (isFlipped) {
-          if (e.key === '1') isPlan ? handlePlanMark('learning') : handleQuickMark('learning');
-          else if (e.key === '2') isPlan ? handlePlanMark('known') : handleQuickMark('known');
+          // Dla Planu: Od 1 do 4 (Oceny 0, 2, 4, 5). Dla Szybkiej Sesji: Tylko 1 i 2
+          if (e.key === '1') isPlan ? handlePlanMark(0) : handleQuickMark('learning');
+          else if (e.key === '2') isPlan ? handlePlanMark(2) : handleQuickMark('learning');
+          else if (e.key === '3') isPlan ? handlePlanMark(4) : handleQuickMark('known');
+          else if (e.key === '4') isPlan ? handlePlanMark(5) : handleQuickMark('known');
         }
       }
     };
@@ -288,8 +296,7 @@ function App() {
     setPlanDeck([]); setPlanSettings(null); setView('home');
   };
 
-  const handleAddUser = (e) => { e.preventDefault(); alert("Funkcja podpięta pod SQLite w następnym kroku!"); };
-  const handleDeleteUser = (id) => { alert("Funkcja podpięta pod SQLite w następnym kroku!"); };
+  const handleAddUser = (e) => { e.preventDefault(); alert("Funkcja podpięta pod bazę po stronie serwera!"); };
 
   const handleQuickUpload = (e) => {
     const file = e.target.files[0];
@@ -315,6 +322,7 @@ function App() {
     setView('quick-session');
   };
 
+  // Stara funkcja dla szybkiej sesji (zostaje bez zmian, bo to sesja bez zapisu)
   const handleQuickMark = (status) => {
     const card = sessionQueue[0];
     if (status === 'known') setQuickKnown(prev => [...prev, card]);
@@ -335,11 +343,13 @@ function App() {
     if (file) {
       Papa.parse(file, {
         complete: (res) => {
+          // NOWOŚĆ: Dodajemy domyślne stany dla algorytmu SM-2
           const parsed = res.data.filter(r => r.length >= 2 && r[0].trim() !== '').map((r, i) => ({ 
-            id: Date.now() + i, front: r[0], back: r[1], step: 0, nextReview: getTodayStr(), dayAssigned: 1 
+            id: Date.now() + i, front: r[0], back: r[1], step: 0, nextReview: getTodayStr(), dayAssigned: 1,
+            repetitions: 0, easeFactor: 2.5, interval: 0
           }));
           if (parsed.length === 0) {
-            alert("Błąd! Nie wykryto żadnych słówek. Upewnij się, że plik ma poprawny format CSV (dwie kolumny oddzielone przecinkiem).");
+            alert("Błąd! Nie wykryto żadnych słówek. Upewnij się, że plik ma poprawny format CSV.");
             return;
           }
           setImportedCards(parsed);
@@ -373,23 +383,43 @@ function App() {
     setView('plan-session');
   };
 
-  const handlePlanMark = (status) => {
+  // NOWOŚĆ: Potężne serce algorytmu SM-2
+  const handlePlanMark = (quality) => {
     const currentCard = sessionQueue[0];
     setIsFlipped(false); setQuizFeedback(null); setQuizInput('');
 
     setTimeout(() => {
       let updatedDeck = planDeck;
-      if (status === 'learning') {
+
+      // Obliczanie nowych wartości przez SM-2
+      const sm2Result = calculateSM2(
+        quality,
+        currentCard.repetitions || 0,
+        currentCard.interval || 0,
+        currentCard.easeFactor || 2.5
+      );
+
+      // Logika dla UI na ten moment
+      if (quality < 3) {
         setWrongIds(prev => new Set(prev).add(currentCard.id));
         setQuickLearning(prev => [...prev, currentCard]); 
       } else {
-        let newStep = wrongInSession.has(currentCard.id) ? 1 : currentCard.step + 1;
-        if (newStep >= INTERVALS.length) newStep = INTERVALS.length - 1;
-        updatedDeck = planDeck.map(c => c.id === currentCard.id ? { ...c, step: newStep, nextReview: addDaysStr(INTERVALS[newStep]) } : c);
-        setPlanDeck(updatedDeck);
         setQuickKnown(prev => [...prev, currentCard]);
       }
 
+      // Aktualizacja bazy
+      updatedDeck = planDeck.map(c => c.id === currentCard.id ? { 
+        ...c, 
+        step: c.step + 1, // Krok trzymamy tylko dla mapy progresu (odróżnia "Nowe" od "Przerobionych")
+        repetitions: sm2Result.repetitions,
+        easeFactor: sm2Result.easeFactor,
+        interval: sm2Result.interval,
+        nextReview: sm2Result.nextReviewDate.split('T')[0] // Data format: YYYY-MM-DD
+      } : c);
+
+      setPlanDeck(updatedDeck);
+
+      // Przejście do kolejnej fiszki
       setSessionQueue(prev => {
         const newQ = prev.slice(1);
         if (newQ.length === 0) { syncToServer(updatedDeck, planSettings, stats); setView('plan-summary'); }
@@ -413,14 +443,16 @@ function App() {
 
     if (isCorrect) {
       setTimeout(() => {
-        isPlan ? handlePlanMark('known') : handleQuickMark('known');
+        // Jeśli dobrze odpowiedział, automatycznie traktujemy to jako Dobre (4)
+        isPlan ? handlePlanMark(4) : handleQuickMark('known');
       }, 1000);
     }
   };
 
   const handleQuizAcknowledge = () => {
     const isPlan = view === 'plan-session';
-    isPlan ? handlePlanMark('learning') : handleQuickMark('learning');
+    // Jeśli źle wpisał i potwierdza, to jest Pustka/Pomyłka (1)
+    isPlan ? handlePlanMark(1) : handleQuickMark('learning');
   };
 
   const finishPlanSession = () => {
@@ -541,12 +573,9 @@ function App() {
             </div>
           )}
 
-          {/* NOWY KAFELEK BOTA */}
           <div className="md:col-span-2 bg-gradient-to-r from-emerald-500 to-emerald-400 text-white p-8 rounded-3xl shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all cursor-pointer flex items-center justify-between group" onClick={() => setView('chatbot')}>
             <div className="flex items-center gap-6">
-              <div className="h-16 w-16 bg-white/20 rounded-2xl flex items-center justify-center">
-                <Bot size={32} />
-              </div>
+              <div className="h-16 w-16 bg-white/20 rounded-2xl flex items-center justify-center"><Bot size={32} /></div>
               <div>
                 <div className="flex items-center gap-2 mb-1">
                   <h2 className="text-2xl font-bold">Zapytaj Nauczyciela</h2>
@@ -558,6 +587,12 @@ function App() {
             <ChevronRight size={32} className="opacity-50 group-hover:opacity-100 group-hover:translate-x-2 transition-all" />
           </div>
 
+          <div className="bg-orange-500 text-white p-8 rounded-3xl shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all cursor-pointer flex flex-col h-full" onClick={() => setView('speech-practice')}>
+            <div className="h-16 w-16 bg-white/20 rounded-2xl flex items-center justify-center mb-6"><Mic size={32} /></div>
+            <h2 className="text-2xl font-bold mb-3">Trening Konwersacji</h2>
+            <p className="text-orange-100 flex-grow">Rozmawiaj z native speakerem używając mikrofonu. Greg oceni Twoją płynność.</p>
+          </div>
+
           <div className="bg-white p-8 rounded-3xl shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all border border-slate-100 cursor-pointer flex flex-col h-full" onClick={() => setView('quick-upload')}>
             <div className="h-16 w-16 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mb-6"><Zap size={32} /></div>
             <h2 className="text-2xl font-bold mb-3 text-slate-800">Szybka Sesja</h2>
@@ -566,8 +601,8 @@ function App() {
           
           <div className="bg-indigo-600 text-white p-8 rounded-3xl shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all cursor-pointer relative overflow-hidden flex flex-col h-full" onClick={() => planSettings ? setView('roadmap') : setView('plan-upload')}>
             <div className="h-16 w-16 bg-indigo-500/50 rounded-2xl flex items-center justify-center mb-6"><Map size={32} /></div>
-            <h2 className="text-2xl font-bold mb-3">Plan Nauki (SRS)</h2>
-            <p className="text-indigo-100 mb-6 flex-grow">Wrzuć plik 1000 słów i określ czas. Aplikacja stworzy plan powtórek i zsynchronizuje z Pythonem.</p>
+            <h2 className="text-2xl font-bold mb-3">Plan Nauki (SM-2)</h2>
+            <p className="text-indigo-100 mb-6 flex-grow">Inteligentny algorytm dobierze przerwy między powtórkami tak, abyś nigdy nie zapomniał materiału.</p>
             {planSettings && <div className="bg-indigo-800/40 px-4 py-2 rounded-xl text-sm font-semibold inline-flex items-center gap-2 mt-auto w-fit">Kontynuuj plan ({planSettings.currentDay}/{planSettings.targetDays})</div>}
           </div>
           
@@ -757,7 +792,7 @@ function App() {
                   <span className="flex items-center gap-2 text-indigo-600 font-semibold"><BookOpen size={18}/> Nowe słowa</span><span className="font-bold">{newToday.length}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="flex items-center gap-2 text-emerald-600 font-semibold"><RotateCcw size={18}/> Do powtórki</span><span className="font-bold">{reviewsToday.length}</span>
+                  <span className="flex items-center gap-2 text-emerald-600 font-semibold"><RotateCcw size={18}/> Do powtórki (SM-2)</span><span className="font-bold">{reviewsToday.length}</span>
                 </div>
               </div>
             </div>
@@ -793,7 +828,6 @@ function App() {
     );
   }
 
-  // WSPÓLNY EKRAN SESJI (FISZKI LUB QUIZ)
   if ((view === 'quick-session' || view === 'plan-session') && sessionQueue.length > 0) {
     const isPlan = view === 'plan-session';
     const currentCard = sessionQueue[0];
@@ -810,7 +844,6 @@ function App() {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4 relative">
         
-        {/* MODAL USTAWIEŃ */}
         {showSettings && (
           <div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4">
             <div className="bg-slate-800 border border-slate-700 p-8 rounded-3xl w-full max-w-sm shadow-2xl">
@@ -852,7 +885,6 @@ function App() {
               <div className="flex gap-2 items-center">
                 <span className={`px-2 py-1 rounded text-xs mr-2 ${isReview ? 'bg-emerald-500/20 text-emerald-400' : 'bg-blue-500/20 text-blue-400'}`}>{isReview ? 'Powtórka' : 'Nowe Słowo'}</span>
                 
-                {/* ZĘBATKA USTAWIEŃ */}
                 <button onClick={() => setShowSettings(true)} className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition" title="Ustawienia">
                   <Settings size={18} />
                 </button>
@@ -864,7 +896,6 @@ function App() {
             <div className="w-full bg-slate-800 rounded-full h-2"><div className={`h-2 rounded-full transition-all ${isPlan ? 'bg-indigo-500' : 'bg-blue-500'}`} style={{ width: `${progress}%` }}></div></div>
           </div>
           
-          {/* TRYB FISZEK */}
           {studyMode === 'flashcards' && (
             <>
               <div className="w-full aspect-[3/2] perspective-1000 cursor-pointer mb-6" onClick={() => setIsFlipped(true)}>
@@ -880,22 +911,42 @@ function App() {
                   </div>
                 </div>
               </div>
-              <div className="h-20">
+              <div className="min-h-20 w-full flex items-center justify-center">
                 {isFlipped && (
-                  <div className="flex gap-4 animate-in fade-in slide-in-from-bottom-2">
-                    <button onClick={() => isPlan ? handlePlanMark('learning') : handleQuickMark('learning')} className="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/30 px-4 py-3 rounded-2xl transition flex justify-center items-center gap-3">
-                      <X size={24} /> <div className="flex flex-col items-start text-left"><span className="font-black text-lg leading-tight">UCZĘ SIĘ</span><span className="text-xs font-semibold opacity-60">Klawisz [1]</span></div>
-                    </button>
-                    <button onClick={() => isPlan ? handlePlanMark('known') : handleQuickMark('known')} className="flex-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 border border-emerald-500/30 px-4 py-3 rounded-2xl transition flex justify-center items-center gap-3">
-                      <Check size={24} /> <div className="flex flex-col items-start text-left"><span className="font-black text-lg leading-tight">UMIEM</span><span className="text-xs font-semibold opacity-60">Klawisz [2]</span></div>
-                    </button>
+                  <div className="w-full flex gap-4 animate-in fade-in slide-in-from-bottom-2">
+                    {/* W PLANIE NAUKI (SM-2) MAMY 4 PRZYCISKI OCENY */}
+                    {isPlan ? (
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 w-full">
+                        <button onClick={() => handlePlanMark(0)} className="bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/30 px-3 py-3 rounded-2xl transition flex flex-col items-center justify-center gap-1 w-full">
+                          <X size={20} /> <span className="font-black text-sm">PUSTKA</span><span className="text-[10px] opacity-60">Klawisz [1]</span>
+                        </button>
+                        <button onClick={() => handlePlanMark(2)} className="bg-orange-500/10 hover:bg-orange-500/20 text-orange-500 border border-orange-500/30 px-3 py-3 rounded-2xl transition flex flex-col items-center justify-center gap-1 w-full">
+                          <Flame size={20} /> <span className="font-black text-sm">TRUDNE</span><span className="text-[10px] opacity-60">Klawisz [2]</span>
+                        </button>
+                        <button onClick={() => handlePlanMark(4)} className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 border border-emerald-500/30 px-3 py-3 rounded-2xl transition flex flex-col items-center justify-center gap-1 w-full">
+                          <Check size={20} /> <span className="font-black text-sm">DOBRE</span><span className="text-[10px] opacity-60">Klawisz [3]</span>
+                        </button>
+                        <button onClick={() => handlePlanMark(5)} className="bg-blue-500/10 hover:bg-blue-500/20 text-blue-500 border border-blue-500/30 px-3 py-3 rounded-2xl transition flex flex-col items-center justify-center gap-1 w-full">
+                          <CheckCircle size={20} /> <span className="font-black text-sm">BANAŁ</span><span className="text-[10px] opacity-60">Klawisz [4]</span>
+                        </button>
+                      </div>
+                    ) : (
+                      // W SZYBKIEJ SESJI MAMY PO STAREMU 2 PRZYCISKI (Brak algorytmu)
+                      <div className="flex gap-4 w-full">
+                        <button onClick={() => handleQuickMark('learning')} className="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/30 px-4 py-3 rounded-2xl transition flex justify-center items-center gap-3">
+                          <X size={24} /> <div className="flex flex-col items-start text-left"><span className="font-black text-lg leading-tight">UCZĘ SIĘ</span><span className="text-xs font-semibold opacity-60">Klawisz [1]</span></div>
+                        </button>
+                        <button onClick={() => handleQuickMark('known')} className="flex-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 border border-emerald-500/30 px-4 py-3 rounded-2xl transition flex justify-center items-center gap-3">
+                          <Check size={24} /> <div className="flex flex-col items-start text-left"><span className="font-black text-lg leading-tight">UMIEM</span><span className="text-xs font-semibold opacity-60">Klawisz [2]</span></div>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
             </>
           )}
 
-          {/* TRYB PISEMNY QUIZ */}
           {studyMode === 'quiz' && (
             <div className="w-full bg-white rounded-3xl shadow-2xl flex flex-col p-8 mb-6 relative overflow-hidden">
               <button onClick={() => playSound(currentFrontText)} className="absolute top-4 right-4 p-3 bg-slate-100 hover:bg-indigo-100 text-slate-400 hover:text-indigo-600 rounded-full transition-colors" title="Odsłuchaj słowo"><Volume2 size={24} /></button>
@@ -919,7 +970,6 @@ function App() {
                   />
                 </div>
 
-                {/* Feedback i Akcje w Quizie */}
                 {quizFeedback === null ? (
                   <button type="submit" className={`w-full text-white font-black py-4 rounded-2xl transition shadow-lg ${isPlan ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-blue-600 hover:bg-blue-700'}`}>
                     Sprawdź
@@ -989,7 +1039,7 @@ function App() {
               <span className="text-3xl font-black text-emerald-700">{quickKnown.length}</span>
             </div>
             <div className="bg-red-50 border border-red-100 p-4 rounded-2xl flex-1 flex flex-col items-center justify-center">
-              <span className="text-sm font-bold text-red-600 uppercase tracking-wider mb-1">Uczę się</span>
+              <span className="text-sm font-bold text-red-600 uppercase tracking-wider mb-1">Pomyłki</span>
               <span className="text-3xl font-black text-red-700">{quickLearning.length}</span>
             </div>
           </div>
@@ -1054,7 +1104,6 @@ function App() {
     );
   }
 
-  
   if (view === 'chatbot') {
     return (
       <div className="min-h-screen bg-slate-50 pt-20 p-6 md:p-12">
@@ -1064,10 +1113,16 @@ function App() {
             <ArrowLeft size={20} /> Wróć do menu głównego
           </button>
         </div>
-      
-        {/* Odpalamy nasz komponent Bota z danymi użytkownika */}
         <ChatBot username={user.username} />
-        
+      </div>
+    );
+  }
+
+  if (view === 'speech-practice') {
+    return (
+      <div className="min-h-screen bg-slate-50 pt-20 p-6 md:p-12">
+        <TopBar />
+        <SpeechPractice username={user.username} onBack={() => setView('home')} />
       </div>
     );
   }
