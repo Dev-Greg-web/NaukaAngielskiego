@@ -12,7 +12,7 @@ app = Flask(__name__,
             template_folder=os.path.join(BASE_DIR, 'templates'))
 
 # KONFIGURACJA BAZY DANYCH
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///fiszki.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///fiszki.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Łączymy aplikację z bazą z pliku models.py
