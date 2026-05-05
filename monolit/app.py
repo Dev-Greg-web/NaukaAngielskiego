@@ -1,6 +1,7 @@
 import json
 from flask import Flask, render_template, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
+from chatbot import get_bot_response
 import os
 
 # 1. Wyciągamy absolutną ścieżkę do folderu, w którym fizycznie leży plik app.py
@@ -87,6 +88,16 @@ def api_sync():
         db.session.commit()
         return jsonify({"success": True})
     return jsonify({"success": False, "error": "Nie znaleziono użytkownika."}), 404
+
+@app.route('/api/chat', methods=['POST'])
+def chat():
+    data = request.get_json()
+    user_msg = data.get('message', '')
+    
+    # Odpalamy silnik z pliku chatbot.py
+    bot_reply = get_bot_response(user_msg)
+    
+    return jsonify({'response': bot_reply})
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
