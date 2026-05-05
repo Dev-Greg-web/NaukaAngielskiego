@@ -95,10 +95,13 @@ def chat():
     data = request.get_json()
     user_msg = data.get('message', '')
     model_type = data.get('modelType', 'universal') 
-    history = data.get('history', [])     # Odbieramy pamięć czatu
-    settings = data.get('settings', {})   # Odbieramy ustawienia
+    history = data.get('history', [])     # Odbieramy historię
     
-    return Response(get_bot_response_stream(user_msg, model_type, history, settings), mimetype='text/event-stream')
+    # TUTAJ POPRAWKA: Usunęliśmy 'settings' z nawiasu, wysyłamy tylko 3 argumenty!
+    return Response(get_bot_response_stream(user_msg, model_type, history), mimetype='text/event-stream')
+
+if __name__ == '__main__':
+    app.run(debug=True)
 
 if __name__ == '__main__':
     app.run(debug=True)
