@@ -1065,9 +1065,9 @@ function App() {
             <ArrowLeft size={20} /> Wróć do menu głównego
           </button>
         </div>
-        
-        {/* Odpalamy nasz komponent Bota */}
-        <ChatBot />
+      
+        {/* Odpalamy nasz komponent Bota z danymi użytkownika */}
+        <ChatBot username={user.username} />
         
       </div>
     );

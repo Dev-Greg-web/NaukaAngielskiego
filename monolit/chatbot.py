@@ -1,34 +1,32 @@
 import os
-import json # NOWOŚĆ: potrzebujemy tego do dekodowania strumienia
+import json
 import requests
 
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 
-# 1. NOWOŚĆ: Mapowanie opcji z Reacta na Twoje własne modele
 MODELS_MAP = {
     "universal": "openai/gpt-oss-120b:free",
     "fast": "qwen/qwen3-coder:free",
     "pro": "google/gemma-4-31b-it:free"
 }
 
-# 2. Twoja lista modeli jako awaryjne (Fallback)
 FALLBACK_MODELS = [
     "openai/gpt-oss-120b:free",
     "google/gemma-4-31b-it:free",
-    "qwen/qwen3-coder:free"
+    "z-ai/glm-4.5-air:free"
 ]
 
 SYSTEM_PROMPT = """Jesteś wirtualnym nauczycielem języka angielskiego. Nazywasz się "Gładysz Greg".
 Twoje zasady:
-1. Nie lubisz lania wody, doceniasz konkret. Tłumaczysz zasady prosto, jak chłop krowie na rowie.
-2. Używasz hacków mnemotechnicznych (np. 2 tryb warunkowy to "skok o jeden czas do tyłu", a 3 tryb to "skok o dwa czasy do tyłu").
-3. Przypominasz uczniom złotą zasadę: "Po IF nigdy nie dajemy WOULD!".
-4. Zawsze jesteś pomocny, czasem rzucisz żartem, ale skupiasz się na gramatyce i słownictwie.
-5. Zawsze odpowiadasz po polsku, chyba że podajesz angielskie przykłady.
-Rozpocznij odpowiedź od razu, nie musisz się witać za każdym razem."""
+1. Nie lubisz lania wody, doceniasz konkret. Tłumaczysz zasady prosto.
+2. Formatyzujesz tekst w Markdown (używaj tabel i pogrubień).
+3. Używasz hacków mnemotechnicznych (np. 2 tryb to "skok w tył").
+4. Przypominasz: "Po IF nigdy nie dajemy WOULD!".
+5. Odpowiadasz po polsku, chyba że dajesz przykłady.
+Rozpocznij odpowiedź od razu."""
 
-# 3. KLUCZOWA ZMIANA: dodajemy drugi argument (model_type="universal")
-def get_bot_response_stream(user_message, model_type="universal"):
+# Dodajemy history i settings
+def get_bot_response_stream(user_message, model_type="universal", history=[], settings={}):
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "HTTP-Referer": "https://naukaangielskiego.onrender.com",
@@ -36,56 +34,51 @@ def get_bot_response_stream(user_message, model_type="universal"):
         "Content-Type": "application/json"
     }
 
-    # Wybieramy główny model z mapy na podstawie wyboru użytkownika w React
-    primary_model = MODELS_MAP.get(model_type, MODELS_MAP["universal"])
+    # 1. BUDOWANIE PAMIĘCI (CONTEXT WINDOW)
+    messages_payload = [{"role": "system", "content": SYSTEM_PROMPT}]
     
-    # Ustawiamy kolejność: najpierw wybrany model, potem reszta jako ratunek
+    # Odczyt z ustawień zdefiniowanych przez usera:
+    memory_limit = int(settings.get("memory", 5))
+    
+    # Bierzemy np. 10 ostatnich wiadomości (5 pytań + 5 odpowiedzi)
+    recent_history = history[-(memory_limit * 2):] if memory_limit > 0 else []
+    for msg in recent_history:
+        role = "user" if msg['sender'] == 'user' else "assistant"
+        if "Błąd serwera" not in msg['text']:
+            messages_payload.append({"role": role, "content": msg['text']})
+
+    # 2. Dopisujemy aktualne pytanie użytkownika
+    messages_payload.append({"role": "user", "content": user_message})
+
+    primary_model = MODELS_MAP.get(model_type, MODELS_MAP["universal"])
     models_to_try = [primary_model] + [m for m in FALLBACK_MODELS if m != primary_model]
 
     for model in models_to_try:
         payload = {
             "model": model,
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_message}
-            ],
-            "stream": True  # <--- MAGIA DZIEJE SIĘ TUTAJ
+            "messages": messages_payload, # PCHAMY PAMIĘĆ DO OPENROUTERA!
+            "stream": True 
         }
 
         try:
-            response = requests.post(
-                "https://openrouter.ai/api/v1/chat/completions", 
-                headers=headers, 
-                json=payload, 
-                stream=True, # Informujemy Python'a o strumieniu
-                timeout=45
-            )
+            response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload, stream=True, timeout=45)
+            if response.status_code != 200: continue 
             
-            if response.status_code != 200:
-                continue # Jeśli błąd, próbujemy następny model
-            
-            # CZYTAMY STRUMIEŃ NA ŻYWO!
             for line in response.iter_lines():
                 if line:
                     line = line.decode('utf-8')
                     if line.startswith("data: "):
                         data_str = line[6:]
-                        if data_str == "[DONE]":
-                            break # Koniec wiadomości
-                        
+                        if data_str == "[DONE]": break
                         try:
                             data_json = json.loads(data_str)
-                            # Wyciągamy ten jeden mały "kawałek" tekstu (np. jedną literę/słowo)
                             if 'choices' in data_json and len(data_json['choices']) > 0:
                                 delta = data_json['choices'][0].get('delta', {})
                                 if 'content' in delta:
-                                    yield delta['content'] # YIELD zwraca dane kawałek po kawałku
-                        except Exception:
-                            pass
-            return # Zakończ funkcję, jeśli ten model zadziałał
-            
+                                    yield delta['content'] 
+                        except Exception: pass
+            return 
         except Exception:
             continue
 
-    # Jeśli wszystko padnie:
-    yield "Ups! Moje zwoje mózgowe AI są przeciążone. Spróbuj zmienić model lub zapytaj ponownie."
+    yield "Ups! Serwery AI są przeciążone. Spróbuj zmienić model w lewym dolnym rogu!"
