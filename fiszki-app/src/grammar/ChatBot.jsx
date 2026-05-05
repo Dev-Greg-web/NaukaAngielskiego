@@ -20,8 +20,12 @@ function ChatBot() {
 
     const userMsg = inputValue;
     
-    // Dodajemy wiadomość użytkownika i blokujemy input
-    setMessages(prev => [...prev, { sender: 'user', text: userMsg }]);
+    // 1. Zaczynamy! Dodajemy pytanie usera i od razu PUSTY dymek dla bota
+    setMessages(prev => [
+      ...prev, 
+      { sender: 'user', text: userMsg },
+      { sender: 'bot', text: '' } // Pusty dymek, który zaraz zacznie się wypełniać
+    ]);
     setInputValue('');
     setIsLoading(true);
 
@@ -32,16 +36,38 @@ function ChatBot() {
         body: JSON.stringify({ message: userMsg })
       });
       
-      const data = await res.json();
+      // Mamy połączenie! Serwer zaczął myśleć, gasimy kółko ładowania.
+      setIsLoading(false);
       
-      // Dodajemy odpowiedź AI
-      setMessages(prev => [...prev, { sender: 'bot', text: data.response }]);
+      // 2. Czytamy strumień na żywo
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let botReply = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break; // Model AI skończył pisać
+        
+        // Dekodujemy nowy kawałek tekstu (np. "W", "y", "t", "ł", "u", "macz")
+        const chunk = decoder.decode(value, { stream: true });
+        botReply += chunk;
+        
+        // 3. Aktualizujemy OSTATNI (pusty) dymek w tablicy wiadomości w czasie rzeczywistym
+        setMessages(prev => {
+          const newMessages = [...prev];
+          newMessages[newMessages.length - 1].text = botReply;
+          return newMessages;
+        });
+      }
       
     } catch (error) {
       console.error("Błąd połączenia z botem:", error);
-      setMessages(prev => [...prev, { sender: 'bot', text: "Błąd serwera. Sprawdź połączenie internetowe." }]);
-    } finally {
-      setIsLoading(false); // Odblokowujemy input
+      setMessages(prev => {
+          const newMessages = [...prev];
+          newMessages[newMessages.length - 1].text = "Błąd serwera. Sprawdź połączenie internetowe.";
+          return newMessages;
+      });
+      setIsLoading(false);
     }
   };
 

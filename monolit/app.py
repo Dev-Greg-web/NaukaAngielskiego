@@ -1,7 +1,7 @@
 import json
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, Response
 from flask_sqlalchemy import SQLAlchemy
-from chatbot import get_bot_response
+from chatbot import get_bot_response_stream
 import os
 
 # 1. Wyciągamy absolutną ścieżkę do folderu, w którym fizycznie leży plik app.py
@@ -94,10 +94,8 @@ def chat():
     data = request.get_json()
     user_msg = data.get('message', '')
     
-    # Odpalamy silnik z pliku chatbot.py
-    bot_reply = get_bot_response(user_msg)
-    
-    return jsonify({'response': bot_reply})
+    # Przekazujemy strumień z generatora bota bezpośrednio jako 'text/event-stream'
+    return Response(get_bot_response_stream(user_msg), mimetype='text/event-stream')
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

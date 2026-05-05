@@ -1,10 +1,9 @@
 import os
+import json # NOWOŚĆ: potrzebujemy tego do dekodowania strumienia
 import requests
 
-# Twój klucz API (Zgodnie z życzeniem - bez zmian)
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 
-# System Fallback (Zgodnie z życzeniem - Twoje modele)
 MODELS = [
     "openai/gpt-oss-120b:free",
     "google/gemma-4-31b-it:free",
@@ -20,7 +19,7 @@ Twoje zasady:
 5. Zawsze odpowiadasz po polsku, chyba że podajesz angielskie przykłady.
 Rozpocznij odpowiedź od razu, nie musisz się witać za każdym razem."""
 
-def get_bot_response(user_message):
+def get_bot_response_stream(user_message):
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "HTTP-Referer": "https://naukaangielskiego.onrender.com",
@@ -28,47 +27,50 @@ def get_bot_response(user_message):
         "Content-Type": "application/json"
     }
 
-    error_logs = [] # Tu zbieramy błędy jak do koszyka
-
     for model in MODELS:
         payload = {
             "model": model,
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_message}
-            ]
+            ],
+            "stream": True  # <--- MAGIA DZIEJE SIĘ TUTAJ
         }
 
         try:
-            # ZWIĘKSZONY TIMEOUT DO 45 SEKUND
             response = requests.post(
                 "https://openrouter.ai/api/v1/chat/completions", 
                 headers=headers, 
                 json=payload, 
+                stream=True, # Informujemy Python'a o strumieniu
                 timeout=45
             )
             
-            # Jeśli OpenRouter odrzuci zapytanie (np. zły klucz, limit, brak kredytów)
             if response.status_code != 200:
-                error_logs.append(f"[{model}] Błąd HTTP {response.status_code}: {response.text}")
-                continue
+                continue # Jeśli błąd, próbujemy następny model
             
-            data = response.json()
+            # CZYTAMY STRUMIEŃ NA ŻYWO!
+            for line in response.iter_lines():
+                if line:
+                    line = line.decode('utf-8')
+                    if line.startswith("data: "):
+                        data_str = line[6:]
+                        if data_str == "[DONE]":
+                            break # Koniec wiadomości
+                        
+                        try:
+                            data_json = json.loads(data_str)
+                            # Wyciągamy ten jeden mały "kawałek" tekstu (np. jedną literę/słowo)
+                            if 'choices' in data_json and len(data_json['choices']) > 0:
+                                delta = data_json['choices'][0].get('delta', {})
+                                if 'content' in delta:
+                                    yield delta['content'] # YIELD zwraca dane kawałek po kawałku
+                        except Exception:
+                            pass
+            return # Zakończ funkcję, jeśli ten model zadziałał
             
-            # Bezpieczne wyciąganie odpowiedzi z JSON-a
-            if 'choices' in data and len(data['choices']) > 0:
-                return data['choices'][0]['message']['content']
-            else:
-                error_logs.append(f"[{model}] Dziwna odpowiedź bez tekstu: {str(data)}")
-                continue
-                
-        except Exception as e:
-            # Jeśli wywali się np. przez przekroczenie 45 sekund (ReadTimeout)
-            error_logs.append(f"[{model}] Wyrzucił błąd w Pythonie: {str(e)}")
+        except Exception:
             continue
 
-    # Jeśli pętla sprawdziła wszystkie 3 modele i nic nie zadziałało, 
-    # wysyłamy zebrany raport błędów do frontendu!
-    raport = "\n\n--- 🚨 DEBUG INFO DLA GREGA 🚨 ---\n" + "\n\n".join(error_logs)
-    
-    return "Serwery AI odmówiły posłuszeństwa. Jako programista, spójrz na błędy poniżej:" + raport
+    # Jeśli wszystko padnie:
+    yield "Ups! Moje zwoje mózgowe AI są przeciążone. Spróbuj jeszcze raz."
