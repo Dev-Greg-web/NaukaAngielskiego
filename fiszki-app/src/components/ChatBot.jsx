@@ -4,17 +4,19 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 function ChatBot({ username }) {
+  // STAN WSPÓŁDZIELONY (cała baza)
+  const [allSessions, setAllSessions] = useState([]);
+  const [fullSettings, setFullSettings] = useState({});
+
+  // STAN LOKALNY (tylko dla ChatBot)
   const [sessions, setSessions] = useState([]);
   const [activeSessionId, setActiveSessionId] = useState(null);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [selectedModel, setSelectedModel] = useState('universal');
-  
-  // Stany UI
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   
-  // NOWOŚĆ: Potężniejszy stan ustawień z domyślnymi parametrami
   const defaultSettings = { memory: 5, tone: 'normal', language: 'pl', length: 'normal' };
   const [botSettings, setBotSettings] = useState(defaultSettings);
 
@@ -25,7 +27,7 @@ function ChatBot({ username }) {
   const scrollToBottom = () => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); };
   useEffect(() => { scrollToBottom() }, [currentMessages, isLoading]);
 
-  // Ładowanie bazy
+  // ŁADOWANIE BAZY
   useEffect(() => {
     if (!username) return;
     const fetchHistory = async () => {
@@ -36,33 +38,55 @@ function ChatBot({ username }) {
           body: JSON.stringify({ username })
         });
         const data = await res.json();
+        
         let loadedSessions = data.messages || [];
         if (loadedSessions.length > 0 && !loadedSessions[0].id) {
-          loadedSessions = [{ id: 'default', title: 'Poprzednia rozmowa', messages: loadedSessions }];
+          loadedSessions = [{ id: 'default', title: 'Poprzednia rozmowa', messages: loadedSessions, type: 'text' }];
         }
-        setSessions(loadedSessions);
-        if (loadedSessions.length > 0) setActiveSessionId(loadedSessions[0].id);
+        setAllSessions(loadedSessions);
         
-        // Bezpieczne wczytywanie ustawień
-        if (data.settings) {
-          setBotSettings({ ...defaultSettings, ...data.settings });
-        }
+        // FILTROWANIE: Bierzemy tylko czaty tekstowe (lub stare bez podanego typu)
+        const textSessions = loadedSessions.filter(s => s.type !== 'voice');
+        setSessions(textSessions);
+        if (textSessions.length > 0) setActiveSessionId(textSessions[0].id);
+        
+        // USTAWIENIA: Rozdzielenie na "text" i "voice"
+        const loadedSettings = data.settings || {};
+        setFullSettings(loadedSettings);
+        const extractedTextSettings = loadedSettings.text || { 
+          memory: loadedSettings.memory ?? 5, 
+          tone: loadedSettings.tone ?? 'normal', 
+          language: loadedSettings.language ?? 'pl', 
+          length: loadedSettings.length ?? 'normal' 
+        };
+        setBotSettings({ ...defaultSettings, ...extractedTextSettings });
+        
       } catch (err) { console.error("Błąd ładowania z bazy:", err); }
     };
     fetchHistory();
   }, [username]);
 
-  const saveToDatabase = async (newSessions, currentSettings) => {
+  // ZAPISYWANIE Z MERGOWANIEM (Chronimy czaty głosowe przed nadpisaniem!)
+  const saveToDatabase = async (newTextSessions, currentTextSettings) => {
+    const mergedSessions = [
+        ...newTextSessions,
+        ...allSessions.filter(s => s.type === 'voice')
+    ];
+    const newSettings = currentTextSettings || botSettings;
+    const mergedSettings = { ...fullSettings, text: newSettings };
+    
+    setAllSessions(mergedSessions);
+    setFullSettings(mergedSettings);
+
     try {
       await fetch('/api/chat_sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, messages: newSessions, settings: currentSettings || botSettings })
+        body: JSON.stringify({ username, messages: mergedSessions, settings: mergedSettings })
       });
     } catch (err) { console.error("Błąd zapisu:", err); }
   };
 
-  // Zmiana konkretnego ustawienia i autozapis
   const handleSettingChange = (settingKey, value) => {
     const newSettings = { ...botSettings, [settingKey]: value };
     setBotSettings(newSettings);
@@ -76,18 +100,16 @@ function ChatBot({ username }) {
     if (window.confirm("Na pewno usunąć ten czat?")) {
       const updatedSessions = sessions.filter(s => s.id !== idToDelete);
       setSessions(updatedSessions);
-      if (activeSessionId === idToDelete) {
-        setActiveSessionId(updatedSessions.length > 0 ? updatedSessions[0].id : null);
-      }
-      saveToDatabase(updatedSessions);
+      if (activeSessionId === idToDelete) setActiveSessionId(updatedSessions.length > 0 ? updatedSessions[0].id : null);
+      saveToDatabase(updatedSessions, botSettings);
     }
   };
 
   const deleteAllChats = () => {
-    if (window.confirm("UWAGA: Czy na pewno chcesz usunąć WSZYSTKIE czaty?")) {
+    if (window.confirm("UWAGA: Czy na pewno chcesz usunąć WSZYSTKIE CZATY TEKSTOWE? Czaty z Voice Room pozostaną nietknięte.")) {
       setSessions([]);
       setActiveSessionId(null);
-      saveToDatabase([]);
+      saveToDatabase([], botSettings);
       setShowSettings(false);
     }
   };
@@ -104,6 +126,7 @@ function ChatBot({ username }) {
       targetSessionId = Date.now().toString();
       const newSession = {
         id: targetSessionId,
+        type: 'text', // Oznaczamy jako czat TEKSTOWY
         title: userMsg.substring(0, 25) + (userMsg.length > 25 ? '...' : ''),
         messages: [{ sender: 'user', text: userMsg }, { sender: 'bot', text: '' }]
       };
@@ -126,7 +149,7 @@ function ChatBot({ username }) {
           message: userMsg, 
           modelType: selectedModel, 
           history: currentSessions.find(s => s.id === targetSessionId).messages.slice(0, -2),
-          settings: botSettings // Wysyłamy ustawienia do pythona!
+          settings: botSettings 
         }) 
       });
       
@@ -137,7 +160,7 @@ function ChatBot({ username }) {
 
       while (true) {
         const { done, value } = await reader.read();
-        if (done) { saveToDatabase(currentSessions); break; }
+        if (done) { saveToDatabase(currentSessions, botSettings); break; }
         const chunk = decoder.decode(value, { stream: true });
         botReply += chunk;
         setSessions(prev => {
@@ -148,116 +171,74 @@ function ChatBot({ username }) {
           return updated;
         });
       }
-    } catch (error) {
-      setIsLoading(false);
-    }
+    } catch (error) { setIsLoading(false); }
   };
 
   return (
     <div className="flex h-[80vh] md:h-[700px] max-w-6xl mx-auto rounded-3xl border border-slate-200 shadow-2xl overflow-hidden relative bg-slate-50 font-sans">
       
-      {/* MODAL USTAWIEŃ Z NOWYMI OPCJAMI */}
+      {/* MODAL USTAWIEŃ */}
       {showSettings && (
         <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl scale-100 animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6 sticky top-0 bg-white z-10 py-2 border-b border-slate-100">
-              <h3 className="font-black text-2xl text-slate-800 flex items-center gap-2">
-                <Settings className="text-emerald-500" /> Preferencje
-              </h3>
-              <button onClick={() => setShowSettings(false)} className="text-slate-400 hover:text-slate-800 transition bg-slate-100 p-2 rounded-full">
-                <X size={20} />
-              </button>
+              <h3 className="font-black text-2xl text-slate-800 flex items-center gap-2"><Settings className="text-emerald-500" /> Preferencje (Tekst)</h3>
+              <button onClick={() => setShowSettings(false)} className="text-slate-400 hover:text-slate-800 transition bg-slate-100 p-2 rounded-full"><X size={20} /></button>
             </div>
             
             <div className="space-y-5">
-              
-              {/* NOWE: Język */}
               <div>
-                <label className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-2">
-                  <Globe size={16} className="text-emerald-500"/> Język odpowiedzi
-                </label>
-                <select 
-                  value={botSettings.language} 
-                  onChange={(e) => handleSettingChange('language', e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500 font-medium text-slate-700"
-                >
+                <label className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-2"><Globe size={16} className="text-emerald-500"/> Język odpowiedzi</label>
+                <select value={botSettings.language} onChange={(e) => handleSettingChange('language', e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500 font-medium text-slate-700">
                   <option value="pl">Polski (Z ang. przykładami)</option>
                   <option value="en">Angielski (Pełne zanurzenie)</option>
                 </select>
               </div>
-
-              {/* NOWE: Osobowość */}
               <div>
-                <label className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-2">
-                  <Smile size={16} className="text-emerald-500"/> Osobowość Grega
-                </label>
-                <select 
-                  value={botSettings.tone} 
-                  onChange={(e) => handleSettingChange('tone', e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500 font-medium text-slate-700"
-                >
+                <label className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-2"><Smile size={16} className="text-emerald-500"/> Osobowość Grega</label>
+                <select value={botSettings.tone} onChange={(e) => handleSettingChange('tone', e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500 font-medium text-slate-700">
                   <option value="normal">Standardowy (Prosty konkret)</option>
                   <option value="chill">Wyluzowany (Slang i żarty)</option>
                   <option value="strict">Akademicki (Surowy profesor)</option>
                 </select>
               </div>
-
-              {/* NOWE: Długość */}
               <div>
-                <label className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-2">
-                  <AlignLeft size={16} className="text-emerald-500"/> Długość odpowiedzi
-                </label>
-                <select 
-                  value={botSettings.length} 
-                  onChange={(e) => handleSettingChange('length', e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500 font-medium text-slate-700"
-                >
+                <label className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-2"><AlignLeft size={16} className="text-emerald-500"/> Długość odpowiedzi</label>
+                <select value={botSettings.length} onChange={(e) => handleSettingChange('length', e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500 font-medium text-slate-700">
                   <option value="short">Bardzo zwięźle (Szybkie notatki)</option>
                   <option value="normal">Optymalnie (Wyjaśnienie i tabele)</option>
                   <option value="long">Wyczerpująco (Długi esej, wyjątki)</option>
                 </select>
               </div>
-
-              {/* STARE: Pamięć */}
               <div>
-                <label className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-2">
-                  <Brain size={16} className="text-emerald-500"/> Pamięć Kontekstowa
-                </label>
-                <select 
-                  value={botSettings.memory} 
-                  onChange={(e) => handleSettingChange('memory', Number(e.target.value))}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500 font-medium text-slate-700"
-                >
+                <label className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-2"><Brain size={16} className="text-emerald-500"/> Pamięć Kontekstowa</label>
+                <select value={botSettings.memory} onChange={(e) => handleSettingChange('memory', Number(e.target.value))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500 font-medium text-slate-700">
                   <option value="0">Brak pamięci (Tylko nowe pytania)</option>
                   <option value="5">Pamięta 5 ostatnich pytań</option>
                   <option value="20">Pamięta bardzo długą historię</option>
                 </select>
               </div>
-
               <div className="pt-6 border-t border-slate-100">
-                <button onClick={deleteAllChats} className="w-full bg-red-50 text-red-600 hover:bg-red-600 hover:text-white font-bold py-3 rounded-xl transition flex justify-center items-center gap-2 border border-red-100">
-                  <AlertTriangle size={18} /> Usuń wszystkie czaty z bazy
-                </button>
+                <button onClick={deleteAllChats} className="w-full bg-red-50 text-red-600 hover:bg-red-600 hover:text-white font-bold py-3 rounded-xl transition flex justify-center items-center gap-2 border border-red-100"><AlertTriangle size={18} /> Usuń czaty tekstowe</button>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* OVERLAY NA TELEFONY */}
       {sidebarOpen && <div className="fixed md:hidden inset-0 bg-slate-900/50 backdrop-blur-sm z-30 transition-opacity" onClick={() => setSidebarOpen(false)} />}
 
       {/* SIDEBAR */}
       <div className={`fixed md:relative top-0 left-0 h-full z-40 w-3/4 sm:w-1/2 md:w-80 lg:w-1/4 bg-slate-900 text-slate-300 border-r border-slate-800 flex flex-col shadow-2xl md:shadow-none transform transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         <div className="p-4 flex items-center justify-between">
           <button onClick={startNewChat} className="flex-1 flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-white px-4 py-3 rounded-xl font-bold transition shadow-lg shadow-emerald-500/20">
-            <Plus size={20} /> Nowy czat
+            <Plus size={20} /> Nowy czat (Tekst)
           </button>
           <button onClick={() => setSidebarOpen(false)} className="md:hidden ml-3 p-3 text-slate-400 hover:text-white bg-slate-800 rounded-xl"><X size={20} /></button>
         </div>
         
         <div className="flex-1 overflow-y-auto px-3 pb-4 space-y-1">
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider px-2 mb-3 mt-2">Historia rozmów</p>
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider px-2 mb-3 mt-2">Historia Tekstowa</p>
           {sessions.length === 0 && <p className="text-sm text-slate-600 px-2 italic">Brak zapisanych czatów.</p>}
           {sessions.map(session => (
             <div 
@@ -277,29 +258,22 @@ function ChatBot({ username }) {
 
       {/* GŁÓWNE OKNO CZATU */}
       <div className="flex-1 flex flex-col bg-slate-50 relative w-full h-full">
-        
-        {/* Nagłówek */}
         <div className="bg-white/80 backdrop-blur-lg border-b border-slate-200 p-4 flex justify-between items-center z-10 sticky top-0">
           <div className="flex items-center gap-3">
             <button onClick={() => setSidebarOpen(true)} className="md:hidden p-2 text-slate-600 hover:bg-slate-100 rounded-xl transition"><Menu size={24} /></button>
-            <div>
-              <h2 className="font-black text-xl text-slate-800 flex items-center gap-2">
-                GregBot <Sparkles className="text-emerald-500" size={20} />
-              </h2>
-            </div>
+            <h2 className="font-black text-xl text-slate-800 flex items-center gap-2">GregBot <Sparkles className="text-emerald-500" size={20} /></h2>
           </div>
-          <button onClick={() => setShowSettings(true)} className="p-2.5 hover:bg-slate-100 text-slate-500 rounded-xl transition bg-white border border-slate-200 shadow-sm flex items-center gap-2" title="Ustawienia Osobiste">
+          <button onClick={() => setShowSettings(true)} className="p-2.5 hover:bg-slate-100 text-slate-500 rounded-xl transition bg-white border border-slate-200 shadow-sm flex items-center gap-2">
              <Settings size={20} /> <span className="hidden sm:block text-sm font-bold text-slate-700">Opcje</span>
           </button>
         </div>
 
-        {/* Wiadomości */}
         <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 scroll-smooth">
           {!activeSessionId && sessions.length > 0 && currentMessages.length === 0 && (
             <div className="h-full flex flex-col items-center justify-center text-slate-400 animate-in fade-in zoom-in duration-500">
               <div className="bg-emerald-100 p-6 rounded-full mb-6 shadow-sm"><Bot size={64} className="text-emerald-500" /></div>
               <h3 className="text-2xl font-black text-slate-700 mb-2">Cześć, {username}!</h3>
-              <p className="text-slate-500 text-center max-w-sm">Dostosuj mój charakter w prawym górnym rogu lub napisz wiadomość poniżej.</p>
+              <p className="text-slate-500 text-center max-w-sm">To jest tryb tekstowy. Twoje czaty stąd nie mieszają się z Voice Room.</p>
             </div>
           )}
 
@@ -334,32 +308,19 @@ function ChatBot({ username }) {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input */}
         <div className="p-4 bg-white/80 backdrop-blur-lg border-t border-slate-200">
           <form onSubmit={sendMessage} className="max-w-4xl mx-auto flex gap-2 md:gap-3 items-end">
             <div className="relative shrink-0 hidden md:block w-40">
-              <select 
-                value={selectedModel}
-                onChange={(e) => setSelectedModel(e.target.value)}
-                disabled={isLoading}
-                className="appearance-none bg-slate-100 border-none text-slate-700 py-3.5 pl-10 pr-8 rounded-2xl font-bold text-sm outline-none focus:ring-2 focus:ring-emerald-500 shadow-inner w-full"
-              >
-                <option value="universal">Uniwersalny</option>
-                <option value="fast">Szybki</option>
+              <select value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)} disabled={isLoading} className="appearance-none bg-slate-100 border-none text-slate-700 py-3.5 pl-10 pr-8 rounded-2xl font-bold text-sm outline-none focus:ring-2 focus:ring-emerald-500 shadow-inner w-full">
+                <option value="universal">Universal</option>
+                <option value="fast">Fast</option>
                 <option value="pro">Pro</option>
               </select>
               <Bot className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-500" size={18} />
             </div>
 
             <div className="flex-1 relative">
-              <input 
-                type="text" 
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                disabled={isLoading}
-                placeholder="Napisz do Grega..."
-                className="w-full bg-white border border-slate-300 rounded-2xl px-5 py-3.5 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 transition disabled:opacity-50 shadow-sm"
-              />
+              <input type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} disabled={isLoading} placeholder="Napisz do Grega..." className="w-full bg-white border border-slate-300 rounded-2xl px-5 py-3.5 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 transition disabled:opacity-50 shadow-sm" />
             </div>
             
             <button type="submit" disabled={isLoading || !inputValue.trim()} className="shrink-0 bg-emerald-500 text-white p-3.5 rounded-2xl hover:bg-emerald-600 transition flex items-center justify-center disabled:opacity-50 shadow-md">

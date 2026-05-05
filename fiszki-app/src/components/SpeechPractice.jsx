@@ -1,12 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, Loader2, Volume2, Activity, ArrowLeft, MessageSquare, Plus, Trash2, Menu, X, Settings, Sparkles, AlertTriangle, Smile, Globe, AlignLeft, Brain, Bot } from 'lucide-react';
+import { Mic, MicOff, Loader2, Volume2, Activity, ArrowLeft, MessageSquare, Plus, Trash2, Menu, X, Settings, Sparkles, AlertTriangle, Smile, Brain, Bot } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
 function SpeechPractice({ username, onBack }) {
-  // Stan Historii i Ustawień (tak jak w ChatBot.jsx)
+  // STAN WSPÓŁDZIELONY
+  const [allSessions, setAllSessions] = useState([]);
+  const [fullSettings, setFullSettings] = useState({});
+
+  // STAN LOKALNY
   const [sessions, setSessions] = useState([]);
   const [activeSessionId, setActiveSessionId] = useState(null);
   const [selectedModel, setSelectedModel] = useState('universal');
@@ -16,7 +20,6 @@ function SpeechPractice({ username, onBack }) {
   const defaultSettings = { memory: 5, tone: 'normal', language: 'en', length: 'short' };
   const [botSettings, setBotSettings] = useState(defaultSettings);
 
-  // Stan Audio
   const [isListening, setIsListening] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -31,7 +34,6 @@ function SpeechPractice({ username, onBack }) {
   const scrollToBottom = () => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); };
   useEffect(() => { scrollToBottom() }, [currentMessages, isThinking, transcript]);
 
-  // 1. ŁADOWANIE BAZY DANYCH
   useEffect(() => {
     if (!username) return;
     const fetchHistory = async () => {
@@ -42,19 +44,25 @@ function SpeechPractice({ username, onBack }) {
           body: JSON.stringify({ username })
         });
         const data = await res.json();
-        let loadedSessions = data.messages || [];
-        if (loadedSessions.length > 0 && !loadedSessions[0].id) {
-          loadedSessions = [{ id: 'default', title: 'Poprzednia rozmowa', messages: loadedSessions }];
-        }
-        setSessions(loadedSessions);
-        if (loadedSessions.length > 0) setActiveSessionId(loadedSessions[0].id);
-        if (data.settings) setBotSettings({ ...defaultSettings, ...data.settings, language: 'en' }); // Wymuszamy domyślnie 'en' dla Voice Room
+        
+        const loadedSessions = data.messages || [];
+        setAllSessions(loadedSessions);
+        
+        // FILTROWANIE: Bierzemy tylko czaty VOICE
+        const voiceSessions = loadedSessions.filter(s => s.type === 'voice');
+        setSessions(voiceSessions);
+        if (voiceSessions.length > 0) setActiveSessionId(voiceSessions[0].id);
+        
+        const loadedSettings = data.settings || {};
+        setFullSettings(loadedSettings);
+        const extractedVoiceSettings = loadedSettings.voice || defaultSettings;
+        setBotSettings(extractedVoiceSettings);
+
       } catch (err) { console.error("Błąd ładowania z bazy:", err); }
     };
     fetchHistory();
   }, [username]);
 
-  // 2. INICJALIZACJA MIKROFONU
   useEffect(() => {
     if (SpeechRecognition) {
       recognitionRef.current = new SpeechRecognition();
@@ -69,18 +77,11 @@ function SpeechPractice({ username, onBack }) {
         }
         setTranscript(currentTranscript);
       };
-
-      recognitionRef.current.onend = () => {
-        setIsListening(false);
-      };
-    } else {
-      alert("Twoja przeglądarka nie obsługuje rozpoznawania mowy. Użyj Google Chrome.");
+      recognitionRef.current.onend = () => { setIsListening(false); };
     }
-
     return () => { window.speechSynthesis.cancel(); };
   }, []);
 
-  // 3. WYSYŁANIE WIADOMOŚCI PO ZAKOŃCZENIU MÓWIENIA
   useEffect(() => {
     if (!isListening && transcript.trim().length > 0 && !isThinking) {
       handleSendToBot(transcript);
@@ -88,12 +89,22 @@ function SpeechPractice({ username, onBack }) {
     }
   }, [isListening]);
 
-  const saveToDatabase = async (newSessions, currentSettings) => {
+  const saveToDatabase = async (newVoiceSessions, currentVoiceSettings) => {
+    const mergedSessions = [
+        ...newVoiceSessions,
+        ...allSessions.filter(s => s.type !== 'voice') // chronimy czaty tekstowe!
+    ];
+    const newSettings = currentVoiceSettings || botSettings;
+    const mergedSettings = { ...fullSettings, voice: newSettings };
+    
+    setAllSessions(mergedSessions);
+    setFullSettings(mergedSettings);
+
     try {
       await fetch('/api/chat_sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, messages: newSessions, settings: currentSettings || botSettings })
+        body: JSON.stringify({ username, messages: mergedSessions, settings: mergedSettings })
       });
     } catch (err) { console.error("Błąd zapisu:", err); }
   };
@@ -112,15 +123,15 @@ function SpeechPractice({ username, onBack }) {
       const updatedSessions = sessions.filter(s => s.id !== idToDelete);
       setSessions(updatedSessions);
       if (activeSessionId === idToDelete) setActiveSessionId(updatedSessions.length > 0 ? updatedSessions[0].id : null);
-      saveToDatabase(updatedSessions);
+      saveToDatabase(updatedSessions, botSettings);
     }
   };
 
   const deleteAllChats = () => {
-    if (window.confirm("UWAGA: Czy na pewno chcesz usunąć WSZYSTKIE czaty?")) {
+    if (window.confirm("UWAGA: Czy na pewno usunąć WSZYSTKIE czaty VOICE? Czaty tekstowe pozostaną nietknięte.")) {
       setSessions([]);
       setActiveSessionId(null);
-      saveToDatabase([]);
+      saveToDatabase([], botSettings);
       setShowSettings(false);
     }
   };
@@ -141,15 +152,11 @@ function SpeechPractice({ username, onBack }) {
 
   const speakText = (text) => {
     if (!('speechSynthesis' in window)) return;
-    
-    // Usuwamy polskie tłumaczenie oraz znaki Markdown z odczytu TTS!
     const cleanTextToSpeak = text.replace(/\*\([\s\S]*?\)\*/g, '').replace(/[*_#|]/g, '').trim();
-
     setIsSpeaking(true);
     const utterance = new SpeechSynthesisUtterance(cleanTextToSpeak);
     utterance.lang = 'en-US'; 
     utterance.rate = 0.95;    
-
     utterance.onend = () => { setIsSpeaking(false); };
     window.speechSynthesis.speak(utterance);
   };
@@ -164,7 +171,8 @@ function SpeechPractice({ username, onBack }) {
       targetSessionId = Date.now().toString();
       const newSession = {
         id: targetSessionId,
-        title: "🎤 " + userText.substring(0, 22) + (userText.length > 22 ? '...' : ''), // Oznaczamy emotikonką!
+        type: 'voice', // Oznaczamy jako VOICE!
+        title: "🎤 " + userText.substring(0, 22) + (userText.length > 22 ? '...' : ''),
         messages: [{ sender: 'user', text: userText }, { sender: 'bot', text: '' }]
       };
       currentSessions.unshift(newSession);
@@ -176,7 +184,7 @@ function SpeechPractice({ username, onBack }) {
 
     setSessions(currentSessions);
 
-    // Wymuszona instrukcja tłumaczenia dla tego konkretnego trybu (nadpisuje ustawienia)
+    // Szare, kursywne tłumaczenie na spodzie
     const hiddenPrompt = "\n[System: Tryb Voice Room. 1. ZAWSZE ODPOWIADAJ TYLKO PO ANGIELSKU (krótko, naturalnie). 2. Pod spodem ZAWSZE podaj polskie tłumaczenie, otoczone gwiazdkami i nawiasami: *(tutaj tłumaczenie)*. Żadnych tabelek.]";
 
     try {
@@ -197,7 +205,7 @@ function SpeechPractice({ username, onBack }) {
 
       while (true) {
         const { done, value } = await reader.read();
-        if (done) { saveToDatabase(currentSessions); break; }
+        if (done) { saveToDatabase(currentSessions, botSettings); break; }
         botReply += decoder.decode(value, { stream: true });
         
         setSessions(prev => {
@@ -212,10 +220,7 @@ function SpeechPractice({ username, onBack }) {
       setIsThinking(false);
       speakText(botReply);
 
-    } catch (error) {
-      console.error("Błąd AI:", error);
-      setIsThinking(false);
-    }
+    } catch (error) { setIsThinking(false); }
   };
 
   return (
@@ -226,7 +231,7 @@ function SpeechPractice({ username, onBack }) {
         <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6 sticky top-0 bg-white z-10 py-2 border-b border-slate-100">
-              <h3 className="font-black text-2xl text-slate-800 flex items-center gap-2"><Settings className="text-orange-500" /> Preferencje Voice Room</h3>
+              <h3 className="font-black text-2xl text-slate-800 flex items-center gap-2"><Settings className="text-orange-500" /> Preferencje Voice</h3>
               <button onClick={() => setShowSettings(false)} className="text-slate-400 hover:text-slate-800 transition bg-slate-100 p-2 rounded-full"><X size={20} /></button>
             </div>
             <div className="space-y-5">
@@ -247,10 +252,10 @@ function SpeechPractice({ username, onBack }) {
                 </select>
               </div>
               <div className="bg-orange-50 p-4 rounded-xl text-orange-800 text-sm font-medium border border-orange-100">
-                W trybie Voice Room język i długość odpowiedzi są wymuszone systemowo (Angielski z tłumaczeniem) dla optymalnego treningu wymowy.
+                Język w tym trybie jest zablokowany na Angielski z tłumaczeniem. Ustawienie zapisuje się osobno od czatu tekstowego!
               </div>
               <div className="pt-6 border-t border-slate-100">
-                <button onClick={deleteAllChats} className="w-full bg-red-50 text-red-600 hover:bg-red-600 hover:text-white font-bold py-3 rounded-xl transition flex justify-center items-center gap-2 border border-red-100"><AlertTriangle size={18} /> Usuń historię czatów</button>
+                <button onClick={deleteAllChats} className="w-full bg-red-50 text-red-600 hover:bg-red-600 hover:text-white font-bold py-3 rounded-xl transition flex justify-center items-center gap-2 border border-red-100"><AlertTriangle size={18} /> Usuń historię czatów Voice</button>
               </div>
             </div>
           </div>
@@ -259,7 +264,7 @@ function SpeechPractice({ username, onBack }) {
 
       {sidebarOpen && <div className="fixed md:hidden inset-0 bg-slate-900/50 backdrop-blur-sm z-30 transition-opacity" onClick={() => setSidebarOpen(false)} />}
 
-      {/* SIDEBAR (Współdzielony z główną historią!) */}
+      {/* SIDEBAR (Tylko czaty VOICE) */}
       <div className={`fixed md:relative top-0 left-0 h-full z-40 w-3/4 sm:w-1/2 md:w-80 lg:w-1/4 bg-slate-900 text-slate-300 border-r border-slate-800 flex flex-col shadow-2xl md:shadow-none transform transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         <div className="p-4 flex items-center justify-between">
           <button onClick={startNewChat} className="flex-1 flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-400 text-white px-4 py-3 rounded-xl font-bold transition shadow-lg shadow-orange-500/20">
@@ -269,7 +274,8 @@ function SpeechPractice({ username, onBack }) {
         </div>
         
         <div className="flex-1 overflow-y-auto px-3 pb-4 space-y-1">
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider px-2 mb-3 mt-2">Historia rozmów</p>
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider px-2 mb-3 mt-2">Historia Rozmów Voice</p>
+          {sessions.length === 0 && <p className="text-sm text-slate-600 px-2 italic">Brak czatów głosowych.</p>}
           {sessions.map(session => (
             <div 
               key={session.id} 
@@ -292,7 +298,6 @@ function SpeechPractice({ username, onBack }) {
       {/* GŁÓWNE OKNO KONWERSACJI */}
       <div className="flex-1 flex flex-col bg-slate-50 relative w-full h-full">
         
-        {/* Górny Pasek (Modele i Ustawienia) */}
         <div className="bg-white/80 backdrop-blur-lg border-b border-slate-200 p-4 flex justify-between items-center z-10 sticky top-0">
           <div className="flex items-center gap-3">
             <button onClick={() => setSidebarOpen(true)} className="md:hidden p-2 text-slate-600 hover:bg-slate-100 rounded-xl transition"><Menu size={24} /></button>
@@ -311,26 +316,24 @@ function SpeechPractice({ username, onBack }) {
           </div>
         </div>
 
-        {/* Miejsce na wiadomości */}
         <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 scroll-smooth bg-slate-50/50">
           {!activeSessionId && sessions.length > 0 && currentMessages.length === 0 && (
             <div className="h-full flex flex-col items-center justify-center text-slate-400 animate-in fade-in zoom-in">
               <div className="bg-orange-100 p-6 rounded-full mb-6"><Volume2 size={64} className="text-orange-500" /></div>
               <h3 className="text-2xl font-black text-slate-700 mb-2">Speak English!</h3>
-              <p className="text-center max-w-sm">Wybierz czat lub kliknij mikrofon, by zacząć nową konwersację. Greg odpowie głosem oraz tekstem (z szarym tłumaczeniem pod spodem).</p>
+              <p className="text-center max-w-sm">Ten tryb używa oddzielnej historii. Twoje czaty tekstowe stąd nie będą widoczne!</p>
             </div>
           )}
 
           {currentMessages.map((msg, index) => (
             <div key={index} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2`}>
-              <div className={`max-w-[85%] md:max-w-[75%] p-4 sm:p-5 shadow-sm ${msg.sender === 'user' ? 'bg-gradient-to-br from-slate-800 to-slate-700 text-white rounded-2xl rounded-tr-sm' : 'bg-white border border-orange-100 text-slate-800 rounded-2xl rounded-tl-sm'}`}>
+              <div className={`max-w-[85%] md:max-w-[75%] p-4 sm:p-5 shadow-sm ${msg.sender === 'user' ? 'bg-gradient-to-br from-slate-800 to-slate-700 text-white rounded-2xl rounded-tr-sm' : 'bg-white border border-orange-100 text-slate-800 rounded-2xl rounded-bl-none shadow-md'}`}>
                 {msg.sender === 'bot' ? (
                   <ReactMarkdown 
                     remarkPlugins={[remarkGfm]}
                     className="prose prose-sm md:prose-base prose-orange max-w-none break-words"
                     components={{
                       p: ({node, ...props}) => <p className="mb-1 last:mb-0 text-base font-semibold leading-relaxed text-slate-800" {...props} />,
-                      // SZARA KURSWA NA TŁUMACZENIA *(...)*
                       em: ({node, ...props}) => <em className="block text-sm text-slate-500 opacity-70 italic mt-3 border-t border-slate-100 pt-2" {...props} />
                     }}
                   >{msg.text}</ReactMarkdown>
@@ -342,7 +345,7 @@ function SpeechPractice({ username, onBack }) {
           {isThinking && (
              <div className="flex justify-start animate-in fade-in">
                <div className="bg-white border border-orange-100 p-4 rounded-2xl rounded-tl-sm shadow-sm flex items-center gap-3 text-slate-500 text-sm">
-                 <Loader2 className="animate-spin text-orange-500" size={18} /> Greg myśli ({selectedModel})...
+                 <Loader2 className="animate-spin text-orange-500" size={18} /> Greg analizuje...
                </div>
             </div>
           )}
@@ -357,7 +360,6 @@ function SpeechPractice({ username, onBack }) {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Panel mikrofonu z falami dźwiękowymi */}
         <div className="bg-white border-t border-slate-200 p-6 flex justify-center items-center relative overflow-hidden">
           {isSpeaking && (
             <div className="absolute top-0 left-0 w-full h-1 bg-orange-100">
