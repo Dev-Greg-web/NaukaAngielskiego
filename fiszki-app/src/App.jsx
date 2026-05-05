@@ -4,7 +4,8 @@ import {
   Upload, RotateCcw, Check, X, Play, Flame, Calendar, 
   Zap, Map, ArrowLeft, Trophy, CheckCircle, Lock, BookOpen, 
   Library, ChevronRight, Volume2, Ear, ArrowRightLeft, 
-  Shield, User, LogOut, Key, Trash2, UserPlus, Users, Settings // DODANO: Settings
+  Shield, User, LogOut, Key, Trash2, UserPlus, Users, Settings,
+  Bot // DODANO: Ikonę Bota
 } from 'lucide-react';
 
 import PresentSimple from './grammar/PresentSimple';
@@ -27,6 +28,9 @@ import FirstConditional from './grammar/FirstConditional';
 import SecondConditional from './grammar/SecondConditional';
 import ThirdConditional from './grammar/ThirdConditional';
 import PassiveVoice from './grammar/PassiveVoice';
+
+// DODANO: Nasz nowy komponent Bota
+import ChatBot from './grammar/ChatBot';
 
 const INTERVALS = [0, 1, 3, 7, 14, 30, 90];
 const getTodayStr = () => new Date().toISOString().split('T')[0];
@@ -166,13 +170,12 @@ function App() {
 
   const [activeGrammar, setActiveGrammar] = useState(null);
   
-  // NOWE STANY DLA USTAWIEŃ I QUIZU
   const [showSettings, setShowSettings] = useState(false);
   const [studyDirection, setStudyDirection] = useState('frontToBack');
-  const [studyMode, setStudyMode] = useState('flashcards'); // 'flashcards' | 'quiz'
+  const [studyMode, setStudyMode] = useState('flashcards'); 
   const [quizInput, setQuizInput] = useState('');
-  const [quizFeedback, setQuizFeedback] = useState(null); // null, 'correct', 'incorrect'
-  const quizInputRef = useRef(null); // Do auto-focusu
+  const [quizFeedback, setQuizFeedback] = useState(null); 
+  const quizInputRef = useRef(null); 
 
   const [importedCards, setImportedCards] = useState([]);
   const [targetDays, setTargetDays] = useState(30);
@@ -213,17 +216,14 @@ function App() {
     refreshData();
   }, []);
 
-  // Globalna obsługa klawiatury dla fiszek
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (view !== 'quick-session' && view !== 'plan-session') return;
       if (sessionQueue.length === 0) return;
-      // Jeśli jesteśmy w trybie quizu i w polu tekstowym, omijamy skróty z fiszek
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
       const isPlan = view === 'plan-session';
 
-      // Tylko dla trybu fiszek
       if (studyMode === 'flashcards') {
         if (e.code === 'Space' || e.key === 'Enter') {
           e.preventDefault();
@@ -239,15 +239,13 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [view, sessionQueue, isFlipped, studyMode, planDeck, quickDeck, planSettings, stats, wrongInSession]);
 
-  // Ustawienie focusu po załadowaniu nowej karty w trybie quizu
   useEffect(() => {
     if (studyMode === 'quiz' && sessionQueue.length > 0 && !quizFeedback) {
       setTimeout(() => {
         quizInputRef.current?.focus();
-      }, 100); // Małe opóźnienie dla pewności, że render się skończył
+      }, 100); 
     }
   }, [sessionQueue, studyMode, quizFeedback]);
-
 
   const syncToServer = async (newDeck, newSettings, newStats) => {
     if (user) { 
@@ -401,29 +399,24 @@ function App() {
     }, 150);
   };
 
-  // LOGIKA QUIZU
   const handleQuizSubmit = (e) => {
     e.preventDefault();
-    if (quizFeedback) return; // Zapobiega podwójnemu zatwierdzeniu
+    if (quizFeedback) return; 
     if (!quizInput.trim()) return;
 
     const isPlan = view === 'plan-session';
     const currentCard = sessionQueue[0];
-    // Zależnie od kierunku, sprawdzamy tył lub przód
     const correctAnswer = studyDirection === 'frontToBack' ? currentCard.back : currentCard.front;
     
-    // Prosta walidacja: zamienia na małe litery i ucina spacje
     const isCorrect = quizInput.trim().toLowerCase() === correctAnswer.trim().toLowerCase();
 
     setQuizFeedback(isCorrect ? 'correct' : 'incorrect');
 
     if (isCorrect) {
-      // Jeśli poprawnie, pokazujemy zielone podświetlenie i automatycznie przewijamy po 1s
       setTimeout(() => {
         isPlan ? handlePlanMark('known') : handleQuickMark('known');
       }, 1000);
     }
-    // Jeśli źle, użytkownik sam musi kliknąć przycisk "Dalej" (handleQuizAcknowledge)
   };
 
   const handleQuizAcknowledge = () => {
@@ -455,10 +448,6 @@ function App() {
       syncToServer([], null, { streak: 0, lastStudyDate: null });
     }
   };
-
-  // ==========================================
-  // RENDEROWANIE WIDOKÓW
-  // ==========================================
 
   if (!user) {
     return (
@@ -542,6 +531,7 @@ function App() {
         <TopBar />
         <h1 className="text-4xl md:text-5xl font-black text-slate-800 mb-10 text-center tracking-tight">Czego uczymy się dziś?</h1>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl w-full">
+          
           {user.role === 'admin' && (
             <div className="md:col-span-2 bg-gradient-to-r from-red-600 to-red-500 text-white p-8 rounded-3xl shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all cursor-pointer flex items-center justify-between" onClick={() => setView('admin-panel')}>
               <div className="flex items-center gap-6">
@@ -551,22 +541,43 @@ function App() {
               <ChevronRight size={32} className="opacity-50" />
             </div>
           )}
+
+          {/* NOWY KAFELEK BOTA */}
+          <div className="md:col-span-2 bg-gradient-to-r from-emerald-500 to-emerald-400 text-white p-8 rounded-3xl shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all cursor-pointer flex items-center justify-between group" onClick={() => setView('chatbot')}>
+            <div className="flex items-center gap-6">
+              <div className="h-16 w-16 bg-white/20 rounded-2xl flex items-center justify-center">
+                <Bot size={32} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <h2 className="text-2xl font-bold">Zapytaj Nauczyciela</h2>
+                  <span className="bg-yellow-400 text-yellow-900 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">Nowość</span>
+                </div>
+                <p className="text-emerald-50">Wirtualny asystent Gładysz Greg odpowie na każde Twoje pytanie o czasy i gramatykę!</p>
+              </div>
+            </div>
+            <ChevronRight size={32} className="opacity-50 group-hover:opacity-100 group-hover:translate-x-2 transition-all" />
+          </div>
+
           <div className="bg-white p-8 rounded-3xl shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all border border-slate-100 cursor-pointer flex flex-col h-full" onClick={() => setView('quick-upload')}>
             <div className="h-16 w-16 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mb-6"><Zap size={32} /></div>
             <h2 className="text-2xl font-bold mb-3 text-slate-800">Szybka Sesja</h2>
             <p className="text-slate-500 mb-6 flex-grow">Wgraj plik i od razu powtarzaj. Brak zapisu – idealne na 5 minut przed sprawdzianem.</p>
           </div>
+          
           <div className="bg-indigo-600 text-white p-8 rounded-3xl shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all cursor-pointer relative overflow-hidden flex flex-col h-full" onClick={() => planSettings ? setView('roadmap') : setView('plan-upload')}>
             <div className="h-16 w-16 bg-indigo-500/50 rounded-2xl flex items-center justify-center mb-6"><Map size={32} /></div>
             <h2 className="text-2xl font-bold mb-3">Plan Nauki (SRS)</h2>
             <p className="text-indigo-100 mb-6 flex-grow">Wrzuć plik 1000 słów i określ czas. Aplikacja stworzy plan powtórek i zsynchronizuje z Pythonem.</p>
             {planSettings && <div className="bg-indigo-800/40 px-4 py-2 rounded-xl text-sm font-semibold inline-flex items-center gap-2 mt-auto w-fit">Kontynuuj plan ({planSettings.currentDay}/{planSettings.targetDays})</div>}
           </div>
+          
           <div className="bg-violet-600 text-white p-8 rounded-3xl shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all cursor-pointer flex flex-col h-full" onClick={() => setView('grammar-list')}>
             <div className="h-16 w-16 bg-violet-500/50 rounded-2xl flex items-center justify-center mb-6"><Library size={32} /></div>
             <h2 className="text-2xl font-bold mb-3">Baza Gramatyki</h2>
             <p className="text-violet-100 flex-grow">Czasy, konstrukcje, zasady i przykłady użycia w praktyce.</p>
           </div>
+          
           <div className="bg-pink-600 text-white p-8 rounded-3xl shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all cursor-pointer flex flex-col h-full" onClick={() => setView('pronunciation-hub')}>
             <div className="h-16 w-16 bg-pink-500/50 rounded-2xl flex items-center justify-center mb-6"><Ear size={32} /></div>
             <h2 className="text-2xl font-bold mb-3">Wymowa (Pronunciation)</h2>
@@ -1040,6 +1051,24 @@ function App() {
              Wróć do Mapy Planu
           </button>
         </div>
+      </div>
+    );
+  }
+
+  // WIDOK BOTA GŁADYSZA GREGA
+  if (view === 'chatbot') {
+    return (
+      <div className="min-h-screen bg-slate-50 pt-20 p-6 md:p-12">
+        <TopBar />
+        <div className="max-w-2xl mx-auto mb-6">
+          <button onClick={() => setView('home')} className="flex items-center gap-2 text-slate-500 hover:text-slate-800 transition font-semibold">
+            <ArrowLeft size={20} /> Wróć do menu głównego
+          </button>
+        </div>
+        
+        {/* Odpalamy nasz komponent Bota */}
+        <ChatBot />
+        
       </div>
     );
   }
