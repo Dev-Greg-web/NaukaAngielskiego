@@ -7,7 +7,7 @@ OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 MODELS = [
     "openai/gpt-oss-120b:free",
     "google/gemma-4-31b-it:free",
-    "baidu/qianfan-ocr-fast:free"
+    "qwen/qwen3-coder:free"
 ]
 
 SYSTEM_PROMPT = """Jesteś wirtualnym nauczycielem języka angielskiego. Nazywasz się "Gładysz Greg".

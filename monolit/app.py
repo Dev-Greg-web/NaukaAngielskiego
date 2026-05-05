@@ -93,9 +93,10 @@ def api_sync():
 def chat():
     data = request.get_json()
     user_msg = data.get('message', '')
+    model_type = data.get('modelType', 'universal') # Odbieramy model z Reacta!
     
-    # Przekazujemy strumień z generatora bota bezpośrednio jako 'text/event-stream'
-    return Response(get_bot_response_stream(user_msg), mimetype='text/event-stream')
+    # Przekazujemy wiadomość i model_type do chatbot.py
+    return Response(get_bot_response_stream(user_msg, model_type), mimetype='text/event-stream')
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
