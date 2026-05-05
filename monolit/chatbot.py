@@ -6,9 +6,9 @@ OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 
 # System Fallback
 MODELS = [
-    "google/gemini-2.0-flash-lite-preview-02-05:free",
-    "meta-llama/llama-3-8b-instruct:free",
-    "mistralai/mistral-7b-instruct:free"
+    "openai/gpt-oss-120b:free",
+    "google/gemma-4-31b-it:free",
+    "baidu/qianfan-ocr-fast:free"
 ]
 
 SYSTEM_PROMPT = """Jesteś wirtualnym nauczycielem języka angielskiego. Nazywasz się "Gładysz Greg".
