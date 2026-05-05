@@ -6,27 +6,26 @@ OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 
 MODELS_MAP = {
     "universal": "openai/gpt-oss-120b:free",
-    "fast": "qwen/qwen3-coder:free",
+    "fast": "baidu/qianfan-ocr-fast:free",
     "pro": "google/gemma-4-31b-it:free"
 }
 
 FALLBACK_MODELS = [
     "openai/gpt-oss-120b:free",
     "google/gemma-4-31b-it:free",
-    "z-ai/glm-4.5-air:free"
+    "baidu/qianfan-ocr-fast:free"
 ]
 
 SYSTEM_PROMPT = """Jesteś wirtualnym nauczycielem języka angielskiego. Nazywasz się "Gładysz Greg".
 Twoje zasady:
 1. Nie lubisz lania wody, doceniasz konkret. Tłumaczysz zasady prosto.
 2. Formatyzujesz tekst w Markdown (używaj tabel i pogrubień).
-3. Używasz hacków mnemotechnicznych (np. 2 tryb to "skok w tył").
+3. Używasz hacków mnemotechnicznych.
 4. Przypominasz: "Po IF nigdy nie dajemy WOULD!".
-5. Odpowiadasz po polsku, chyba że dajesz przykłady.
-Rozpocznij odpowiedź od razu."""
+5. Odpowiadasz po polsku, chyba że dajesz przykłady."""
 
-# Dodajemy history i settings
-def get_bot_response_stream(user_message, model_type="universal", history=[], settings={}):
+# Usunięto 'settings', bot dostaje po prostu wybraną historię danego czatu
+def get_bot_response_stream(user_message, model_type="universal", history=[]):
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "HTTP-Referer": "https://naukaangielskiego.onrender.com",
@@ -34,20 +33,16 @@ def get_bot_response_stream(user_message, model_type="universal", history=[], se
         "Content-Type": "application/json"
     }
 
-    # 1. BUDOWANIE PAMIĘCI (CONTEXT WINDOW)
+    # Budowanie pamięci z konkretnego wątku
     messages_payload = [{"role": "system", "content": SYSTEM_PROMPT}]
     
-    # Odczyt z ustawień zdefiniowanych przez usera:
-    memory_limit = int(settings.get("memory", 5))
-    
-    # Bierzemy np. 10 ostatnich wiadomości (5 pytań + 5 odpowiedzi)
-    recent_history = history[-(memory_limit * 2):] if memory_limit > 0 else []
+    # Bierzemy maksymalnie 20 ostatnich wiadomości z danego czatu, żeby nie zapchać OpenRoutera
+    recent_history = history[-20:]
     for msg in recent_history:
         role = "user" if msg['sender'] == 'user' else "assistant"
         if "Błąd serwera" not in msg['text']:
             messages_payload.append({"role": role, "content": msg['text']})
 
-    # 2. Dopisujemy aktualne pytanie użytkownika
     messages_payload.append({"role": "user", "content": user_message})
 
     primary_model = MODELS_MAP.get(model_type, MODELS_MAP["universal"])
@@ -56,7 +51,7 @@ def get_bot_response_stream(user_message, model_type="universal", history=[], se
     for model in models_to_try:
         payload = {
             "model": model,
-            "messages": messages_payload, # PCHAMY PAMIĘĆ DO OPENROUTERA!
+            "messages": messages_payload, 
             "stream": True 
         }
 
@@ -81,4 +76,4 @@ def get_bot_response_stream(user_message, model_type="universal", history=[], se
         except Exception:
             continue
 
-    yield "Ups! Serwery AI są przeciążone. Spróbuj zmienić model w lewym dolnym rogu!"
+    yield "Ups! Serwery AI są przeciążone. Spróbuj zmienić model w dolnym rogu!"

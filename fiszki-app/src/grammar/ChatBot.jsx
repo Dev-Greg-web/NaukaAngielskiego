@@ -1,24 +1,31 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, Loader2, Settings, X, Trash2 } from 'lucide-react';
+import { Send, Bot, Loader2, MessageSquare, Plus, Trash2, Menu } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
-// Odbieramy login użytkownika z App.jsx
 function ChatBot({ username }) {
-  const [messages, setMessages] = useState([]);
+  // Stan przechowujący wszystkie wątki (sesje) czatów
+  const [sessions, setSessions] = useState([]);
+  // ID aktualnie otwartego czatu
+  const [activeSessionId, setActiveSessionId] = useState(null);
+  
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [selectedModel, setSelectedModel] = useState('universal');
-  
-  // Stany ustawień
-  const [showSettings, setShowSettings] = useState(false);
-  const [botSettings, setBotSettings] = useState({ memory: 5 });
-  
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
   const messagesEndRef = useRef(null);
 
-  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, isLoading]);
+  // Aktywna sesja i jej wiadomości
+  const activeSession = sessions.find(s => s.id === activeSessionId);
+  const currentMessages = activeSession ? activeSession.messages : [];
 
-  // 1. ŁADOWANIE CZATU Z BAZY SQLALCHEMY PO STARCIE
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+  useEffect(() => { scrollToBottom() }, [currentMessages, isLoading]);
+
+  // 1. ŁADOWANIE CZATÓW Z BAZY DANYCH
   useEffect(() => {
     if (!username) return;
     const fetchHistory = async () => {
@@ -30,14 +37,17 @@ function ChatBot({ username }) {
         });
         const data = await res.json();
         
-        // Jeśli baza pusta, dajemy powitanie
-        if (!data.messages || data.messages.length === 0) {
-          setMessages([{ sender: 'bot', text: 'Cześć! Jestem Twoim prywatnym nauczycielem AI - Gładysz Greg. Zsynchronizowano Twoją bazę SQLAlchemy!' }]);
-        } else {
-          setMessages(data.messages);
+        let loadedSessions = data.messages || [];
+        
+        // MIGRACJA: Jeśli baza ma stary format (pojedynczą listę), zamieniamy ją na format sesji
+        if (loadedSessions.length > 0 && !loadedSessions[0].id) {
+          loadedSessions = [{ id: 'default', title: 'Poprzednia rozmowa', messages: loadedSessions }];
         }
         
-        if (data.settings) setBotSettings(data.settings);
+        setSessions(loadedSessions);
+        if (loadedSessions.length > 0) {
+          setActiveSessionId(loadedSessions[0].id);
+        }
       } catch (err) {
         console.error("Błąd ładowania z bazy:", err);
       }
@@ -45,35 +55,67 @@ function ChatBot({ username }) {
     fetchHistory();
   }, [username]);
 
-  // 2. FUNKCJA ZAPISUJĄCA W TLE DO BAZY SQLALCHEMY
-  const saveToDatabase = async (newMessages, currentSettings) => {
+  // 2. ZAPISYWANIE DO BAZY SQLALCHEMY
+  const saveToDatabase = async (newSessions) => {
     try {
       await fetch('/api/chat_sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, messages: newMessages, settings: currentSettings })
+        body: JSON.stringify({ username, messages: newSessions, settings: {} })
       });
     } catch (err) {
       console.error("Błąd zapisu:", err);
     }
   };
 
-  const clearHistory = () => {
-    if (window.confirm("Na pewno usunąć całą historię czatu z bazy SQLAlchemy?")) {
-      const resetMsg = [{ sender: 'bot', text: 'Pamięć bazy wyczyszczona. Lecimy od nowa!' }];
-      setMessages(resetMsg);
-      saveToDatabase(resetMsg, botSettings);
-      setShowSettings(false);
+  // 3. TWORZENIE NOWEGO CZATU
+  const startNewChat = () => {
+    setActiveSessionId(null); // Odznaczenie sesji przygotowuje pusty ekran
+    if (window.innerWidth < 768) setSidebarOpen(false); // Chowa sidebar na telefonach
+  };
+
+  // 4. USUWANIE CZATU
+  const deleteChat = (e, idToDelete) => {
+    e.stopPropagation();
+    if (window.confirm("Na pewno usunąć ten czat?")) {
+      const updatedSessions = sessions.filter(s => s.id !== idToDelete);
+      setSessions(updatedSessions);
+      if (activeSessionId === idToDelete) {
+        setActiveSessionId(updatedSessions.length > 0 ? updatedSessions[0].id : null);
+      }
+      saveToDatabase(updatedSessions);
     }
   };
 
+  // 5. WYSYŁANIE WIADOMOŚCI
   const sendMessage = async (e) => {
     e.preventDefault();
     if (!inputValue.trim() || isLoading) return;
 
     const userMsg = inputValue;
-    const tempMessages = [...messages, { sender: 'user', text: userMsg }, { sender: 'bot', text: '' }];
-    setMessages(tempMessages);
+    let currentSessions = [...sessions];
+    let targetSessionId = activeSessionId;
+
+    // Tworzenie nowego czatu, jeśli żaden nie jest aktywny
+    if (!targetSessionId) {
+      targetSessionId = Date.now().toString();
+      const newSession = {
+        id: targetSessionId,
+        title: userMsg.substring(0, 25) + (userMsg.length > 25 ? '...' : ''), // Auto-tytuł!
+        messages: [{ sender: 'user', text: userMsg }, { sender: 'bot', text: '' }]
+      };
+      currentSessions.unshift(newSession); // Dodajemy na początek
+      setActiveSessionId(targetSessionId);
+    } else {
+      // Aktualizacja istniejącego czatu
+      const sessionIndex = currentSessions.findIndex(s => s.id === targetSessionId);
+      currentSessions[sessionIndex].messages.push(
+        { sender: 'user', text: userMsg },
+        { sender: 'bot', text: '' }
+      );
+    }
+
+    setSessions(currentSessions);
     setInputValue('');
     setIsLoading(true);
 
@@ -81,11 +123,11 @@ function ChatBot({ username }) {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        // Wysyłamy historię tylko Z TEGO KONKRETNEGO czatu!
         body: JSON.stringify({ 
           message: userMsg, 
           modelType: selectedModel, 
-          history: messages, 
-          settings: botSettings 
+          history: currentSessions.find(s => s.id === targetSessionId).messages.slice(0, -2)
         }) 
       });
       
@@ -96,160 +138,170 @@ function ChatBot({ username }) {
 
       while (true) {
         const { done, value } = await reader.read();
+        
         if (done) {
-          // KONIEC PISANIA: Pchamy całą dyskusję do SQlite!
-          const finalMessages = [...messages, { sender: 'user', text: userMsg }, { sender: 'bot', text: botReply }];
-          saveToDatabase(finalMessages, botSettings);
+          saveToDatabase(currentSessions); // Zapis do SQL po zakończeniu
           break; 
         }
         
         const chunk = decoder.decode(value, { stream: true });
         botReply += chunk;
-        setMessages(prev => {
-          const newMessages = [...prev];
-          newMessages[newMessages.length - 1].text = botReply;
-          return newMessages;
+        
+        // Zaktualizuj tekst bota w aktywnym czacie
+        setSessions(prev => {
+          const updated = [...prev];
+          const sIndex = updated.findIndex(s => s.id === targetSessionId);
+          const mIndex = updated[sIndex].messages.length - 1;
+          updated[sIndex].messages[mIndex].text = botReply;
+          return updated;
         });
       }
       
     } catch (error) {
-      setMessages(prev => {
-          const newMessages = [...prev];
-          newMessages[newMessages.length - 1].text = "Błąd serwera.";
-          return newMessages;
+      setSessions(prev => {
+          const updated = [...prev];
+          const sIndex = updated.findIndex(s => s.id === targetSessionId);
+          const mIndex = updated[sIndex].messages.length - 1;
+          updated[sIndex].messages[mIndex].text = "Błąd serwera. Sprawdź połączenie.";
+          return updated;
       });
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="flex flex-col bg-slate-50 h-[600px] max-w-2xl mx-auto rounded-3xl border border-slate-200 shadow-lg overflow-hidden relative">
+    <div className="flex h-[700px] max-w-5xl mx-auto rounded-3xl border border-slate-200 shadow-2xl overflow-hidden relative bg-white">
       
-      {/* MODAL USTAWIEŃ */}
-      {showSettings && (
-        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="font-black text-xl text-slate-800 flex items-center gap-2"><Settings className="text-emerald-500" /> Ustawienia AI</h3>
-              <button onClick={() => setShowSettings(false)} className="text-slate-400 hover:text-red-500"><X /></button>
+      {/* SIDEBAR - LISTA CZATÓW */}
+      <div className={`${sidebarOpen ? 'flex' : 'hidden'} md:flex flex-col w-full md:w-1/3 lg:w-1/4 bg-[#1e1e1e] text-slate-300 border-r border-slate-700/50 absolute md:relative z-20 h-full`}>
+        <div className="p-4">
+          <button onClick={startNewChat} className="w-full flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-3 rounded-xl font-bold transition">
+            <Plus size={20} /> Nowy czat
+          </button>
+        </div>
+        
+        <div className="flex-1 overflow-y-auto px-3 pb-4 space-y-1">
+          <p className="text-xs font-bold text-slate-500 uppercase px-2 mb-2 mt-4">Twoje Czaty</p>
+          {sessions.map(session => (
+            <div 
+              key={session.id} 
+              onClick={() => { setActiveSessionId(session.id); if(window.innerWidth < 768) setSidebarOpen(false); }}
+              className={`flex items-center justify-between px-3 py-3 rounded-xl cursor-pointer transition group ${
+                activeSessionId === session.id ? 'bg-[#2d2d2d] text-white' : 'hover:bg-[#2a2a2a]'
+              }`}
+            >
+              <div className="flex items-center gap-3 overflow-hidden">
+                <MessageSquare size={16} className={activeSessionId === session.id ? 'text-emerald-500' : 'text-slate-500'} />
+                <span className="truncate text-sm font-medium">{session.title}</span>
+              </div>
+              <button 
+                onClick={(e) => deleteChat(e, session.id)} 
+                className="opacity-0 group-hover:opacity-100 hover:text-red-400 transition"
+              >
+                <Trash2 size={16} />
+              </button>
             </div>
-            
-            <div className="space-y-6">
-              <div>
-                <label className="text-sm font-bold text-slate-600 block mb-2">Pamięć Kontekstowa</label>
-                <p className="text-xs text-slate-500 mb-2">Ile poprzednich wiadomości bot ma wysłać do modelu, by pamiętać temat?</p>
-                <select 
-                  value={botSettings.memory} 
-                  onChange={(e) => {
-                    const newSettings = {...botSettings, memory: Number(e.target.value)};
-                    setBotSettings(newSettings);
-                    saveToDatabase(messages, newSettings);
-                  }}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none"
-                >
-                  <option value="0">Zero pamięci (Złota rybka)</option>
-                  <option value="5">5 ostatnich wymian (Optymalnie)</option>
-                  <option value="20">20 ostatnich wymian (Dużo tokenów)</option>
-                </select>
-              </div>
+          ))}
+        </div>
+      </div>
 
-              <div className="pt-4 border-t border-slate-100">
-                <button onClick={clearHistory} className="w-full bg-red-50 text-red-600 hover:bg-red-600 hover:text-white font-bold py-3 rounded-xl transition flex justify-center items-center gap-2">
-                  <Trash2 size={18} /> Wyczyść historię z bazy SQL
-                </button>
-              </div>
+      {/* GŁÓWNE OKNO CZATU */}
+      <div className="flex-1 flex flex-col bg-slate-50 relative w-full">
+        
+        {/* Nagłówek czatu */}
+        <div className="bg-white border-b border-slate-200 p-4 flex justify-between items-center shadow-sm z-10">
+          <div className="flex items-center gap-3">
+            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="md:hidden p-2 text-slate-500 hover:bg-slate-100 rounded-lg">
+              <Menu size={24} />
+            </button>
+            <div className="bg-emerald-100 p-2 rounded-xl text-emerald-600">
+              <Bot size={24} />
+            </div>
+            <div>
+              <h2 className="font-black text-lg text-slate-800 leading-tight">
+                GregBot <span className="text-xs bg-emerald-500 text-white px-2 py-0.5 rounded-md uppercase tracking-wider ml-1">AI</span>
+              </h2>
             </div>
           </div>
         </div>
-      )}
 
-      {/* Nagłówek czatu */}
-      <div className="bg-emerald-500 text-white p-4 flex justify-between items-center shadow-md z-10">
-        <div className="flex items-center gap-3">
-          <div className="bg-white p-2 rounded-full text-emerald-600 shadow-sm">
-            <Bot size={24} />
-          </div>
-          <div>
-            <h2 className="font-black text-xl flex items-center gap-2">
-              GregBot <span className="bg-emerald-700 text-xs px-2 py-0.5 rounded-md uppercase tracking-widest">SQLAlchemy</span>
-            </h2>
-            <p className="text-emerald-100 text-xs font-bold uppercase tracking-widest">Konto: {username}</p>
-          </div>
-        </div>
-        <button onClick={() => setShowSettings(true)} className="p-2 hover:bg-emerald-600 rounded-full transition text-emerald-50">
-          <Settings size={24} />
-        </button>
-      </div>
-
-      {/* Okno z wiadomościami */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.map((msg, index) => (
-          <div key={index} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[85%] p-4 rounded-2xl shadow-sm ${
-              msg.sender === 'user' 
-                ? 'bg-slate-800 text-white rounded-br-none' 
-                : 'bg-white border border-slate-200 text-slate-800 rounded-bl-none'
-            }`}>
-              {msg.sender === 'bot' ? (
-                <ReactMarkdown 
-                  remarkPlugins={[remarkGfm]}
-                  className="prose prose-sm md:prose-base prose-emerald max-w-none"
-                  components={{
-                    table: ({node, ...props}) => <div className="overflow-x-auto"><table className="border-collapse border border-slate-300 w-full my-4 text-sm" {...props} /></div>,
-                    th: ({node, ...props}) => <th className="border border-slate-300 bg-slate-100 px-3 py-2 text-left font-bold text-slate-700" {...props} />,
-                    td: ({node, ...props}) => <td className="border border-slate-300 px-3 py-2 text-slate-600" {...props} />,
-                    strong: ({node, ...props}) => <strong className="font-black text-slate-800" {...props} />,
-                    h3: ({node, ...props}) => <h3 className="text-xl font-bold mt-4 mb-2 text-emerald-700" {...props} />,
-                    p: ({node, ...props}) => <p className="mb-2 last:mb-0" {...props} />
-                  }}
-                >
-                  {msg.text}
-                </ReactMarkdown>
-              ) : (
-                msg.text
-              )}
+        {/* Miejsce na wiadomości */}
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
+          {!activeSessionId && sessions.length > 0 && currentMessages.length === 0 && (
+            <div className="h-full flex flex-col items-center justify-center text-slate-400">
+              <Bot size={48} className="mb-4 opacity-50" />
+              <h3 className="text-xl font-bold text-slate-600 mb-2">Jak mogę Ci pomóc?</h3>
+              <p className="text-sm">Napisz wiadomość poniżej, aby rozpocząć nowy czat.</p>
             </div>
-          </div>
-        ))}
-        {isLoading && (
-          <div className="flex justify-start animate-in fade-in">
-             <div className="bg-white border border-slate-200 p-4 rounded-2xl rounded-bl-none shadow-sm flex items-center gap-3 text-slate-500 font-medium">
-               <Loader2 className="animate-spin text-emerald-500" size={20} />
-               Analiza (Model: {selectedModel})...
-             </div>
-          </div>
-        )}
-        <div ref={messagesEndRef} />
-      </div>
+          )}
 
-      {/* Pole wpisywania */}
-      <form onSubmit={sendMessage} className="p-4 bg-white border-t border-slate-100 flex gap-2">
-        <div className="relative hidden md:block">
-          <select 
-            value={selectedModel}
-            onChange={(e) => setSelectedModel(e.target.value)}
+          {currentMessages.map((msg, index) => (
+            <div key={index} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[90%] md:max-w-[80%] p-4 rounded-2xl shadow-sm ${
+                msg.sender === 'user' 
+                  ? 'bg-slate-800 text-white rounded-br-none' 
+                  : 'bg-white border border-slate-200 text-slate-800 rounded-bl-none'
+              }`}>
+                {msg.sender === 'bot' ? (
+                  <ReactMarkdown 
+                    remarkPlugins={[remarkGfm]}
+                    className="prose prose-sm md:prose-base prose-emerald max-w-none"
+                    components={{
+                      table: ({node, ...props}) => <div className="overflow-x-auto"><table className="border-collapse border border-slate-300 w-full my-4 text-sm" {...props} /></div>,
+                      th: ({node, ...props}) => <th className="border border-slate-300 bg-slate-100 px-3 py-2 text-left font-bold text-slate-700" {...props} />,
+                      td: ({node, ...props}) => <td className="border border-slate-300 px-3 py-2 text-slate-600" {...props} />,
+                      strong: ({node, ...props}) => <strong className="font-black text-slate-800" {...props} />
+                    }}
+                  >
+                    {msg.text}
+                  </ReactMarkdown>
+                ) : (
+                  msg.text
+                )}
+              </div>
+            </div>
+          ))}
+          
+          {isLoading && (
+            <div className="flex justify-start animate-in fade-in">
+               <div className="bg-white border border-slate-200 p-4 rounded-2xl rounded-bl-none shadow-sm flex items-center gap-3 text-slate-500 font-medium text-sm">
+                 <Loader2 className="animate-spin text-emerald-500" size={18} />
+                 Analiza (Model: {selectedModel})...
+               </div>
+            </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Pole wpisywania */}
+        <form onSubmit={sendMessage} className="p-4 bg-white border-t border-slate-200 flex gap-2">
+          <div className="relative hidden md:block w-48">
+            <select 
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              disabled={isLoading}
+              className="w-full appearance-none bg-slate-50 border border-slate-200 text-slate-700 py-3 pl-10 pr-4 rounded-xl font-bold text-sm outline-none focus:border-emerald-500 transition cursor-pointer shadow-sm"
+            >
+              <option value="universal">Uniwersalny</option>
+              <option value="fast">Szybki</option>
+              <option value="pro">Myślący (Pro)</option>
+            </select>
+            <Bot className="absolute left-3 top-1/2 transform -translate-y-1/2 text-emerald-500" size={18} />
+          </div>
+
+          <input 
+            type="text" 
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
             disabled={isLoading}
-            className="appearance-none bg-slate-50 border border-slate-200 text-slate-700 py-3 pl-10 pr-4 rounded-xl font-bold text-sm outline-none focus:border-emerald-500 transition cursor-pointer h-full shadow-sm"
-          >
-            <option value="universal">Uniwersalny</option>
-            <option value="fast">Szybki</option>
-            <option value="pro">Myślący (Pro)</option>
-          </select>
-          <Bot className="absolute left-3 top-1/2 transform -translate-y-1/2 text-emerald-500" size={20} />
-        </div>
-
-        <input 
-          type="text" 
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          disabled={isLoading}
-          placeholder="Zapytaj mnie o gramatykę..."
-          className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition disabled:opacity-50 shadow-sm"
-        />
-        <button type="submit" disabled={isLoading} className="bg-emerald-500 text-white p-3 rounded-xl hover:bg-emerald-600 transition flex items-center justify-center disabled:opacity-50 shadow-sm">
-          <Send size={24} />
-        </button>
-      </form>
+            placeholder="Napisz do Grega..."
+            className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition disabled:opacity-50 shadow-sm"
+          />
+          <button type="submit" disabled={isLoading} className="bg-emerald-500 text-white p-3 rounded-xl hover:bg-emerald-600 transition flex items-center justify-center disabled:opacity-50 shadow-sm">
+            <Send size={20} />
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
