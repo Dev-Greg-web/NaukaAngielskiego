@@ -2,7 +2,7 @@ import os
 import requests
 
 # Twój klucz API
-OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "WLEJ_TUTAJ_SWOJ_KLUCZ_Z_OPENROUTER")
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 
 # System Fallback
 MODELS = [
