@@ -130,40 +130,98 @@ function ThirdConditional() {
       {/* ZAKŁADKA 3: ZAAWANSOWANE */}
       {activeTab === 'advanced' && (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
-          <section className="bg-slate-900 text-white p-8 rounded-3xl shadow-xl">
-            <h2 className="text-3xl font-black mb-6 border-b border-slate-700 pb-4 flex items-center gap-3">
-              <TimerOff className="text-amber-400" size={32} /> Inwersja (Dla poziomu C1/C2)
-            </h2>
-            <p className="mb-6 text-slate-300 text-lg">
-              W bardzo formalnym, książkowym języku angielskim możemy całkowicie wyrzucić słówko <strong>IF</strong>. Zamiast niego wyciągamy słowo "Had" na sam początek zdania (jak w pytaniu, chociaż to nie jest pytanie). Brzmi to wybitnie literacko.
-            </p>
-            
-            <div className="grid md:grid-cols-2 gap-6 mt-6">
-              <div className="bg-slate-800 p-6 rounded-2xl border border-slate-600">
-                <h3 className="font-bold text-rose-400 mb-3 text-xl">Standard (Poziom B2)</h3>
-                <p className="text-sm text-slate-400 mb-4">Klasyczna forma z "If". Używana na co dzień.</p>
-                <div className="font-mono text-slate-300 bg-black/30 px-4 py-3 rounded-lg">
-                  <p><strong>If I had known</strong> the truth, I wouldn't have trusted him.</p>
+          
+          <section className="bg-slate-900 text-white p-8 rounded-3xl shadow-xl border border-slate-800">
+            {/* NAGŁÓWEK INWERSJI */}
+            <header className="border-b border-slate-700 pb-6 mb-8">
+              <h2 className="text-3xl font-black flex items-center gap-3 text-amber-400 mb-2">
+                <TimerOff size={32} /> Inwersja Warunkowa (C1 / C2)
+              </h2>
+              <p className="text-slate-300 text-lg">
+                Wyższa szkoła jazdy. Całkowicie usuwamy słówko "IF", a mimo to zdanie wciąż wyraża warunek. Używane w bardzo formalnym języku, w literaturze lub gdy chcemy nadać wypowiedzi dramatycznego tonu[cite: 36].
+              </p>
+            </header>
+
+            {/* LOGIKA - O CO CHODZI? */}
+            <div className="mb-10">
+              <h3 className="text-2xl font-bold text-violet-400 mb-4 flex items-center gap-2">
+                🧠 Na czym polega logika?
+              </h3>
+              <p className="text-slate-300 mb-4 leading-relaxed">
+                W języku angielskim szyk zdania (kolejność słów) jest święty. Zazwyczaj "operator przed osobą" oznacza pytanie. Jednak w inwersji warunkowej robimy to celowo w zdaniu twierdzącym. Sam fakt, że <strong>wyciągamy słowo "Had" na sam początek zdania</strong>, jest dla Anglika sygnałem: <em className="text-amber-300">"Aha! On usunął 'If', to jest zdanie warunkowe!"</em>[cite: 36].
+              </p>
+            </div>
+
+            {/* JAK ZBUDOWAĆ - KROK PO KROKU */}
+            <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 mb-10">
+              <h3 className="text-xl font-bold text-emerald-400 mb-4 uppercase tracking-wider">🛠️ Konstrukcja w 3 krokach</h3>
+              
+              <div className="space-y-4 font-mono">
+                <div className="flex items-center gap-4">
+                  <span className="bg-slate-700 text-slate-400 px-3 py-1 rounded text-sm">Krok 1</span>
+                  <p className="text-slate-400">Bierzemy standardowe zdanie: <br/><strong className="text-white">If I had known the truth...</strong>[cite: 36]</p>
                 </div>
-              </div>
-              <div className="bg-slate-800 p-6 rounded-2xl border border-amber-500/30 relative overflow-hidden shadow-inner">
-                <div className="absolute top-0 right-0 bg-amber-500 text-slate-900 text-[10px] font-black px-3 py-1 rounded-bl-xl uppercase">Pro level</div>
-                <h3 className="font-bold text-amber-400 mb-3 text-xl">Inwersja (Poziom C1+)</h3>
-                <p className="text-sm text-slate-400 mb-4">Wywal "If", zamień miejscami osobę i "Had".</p>
-                <div className="font-mono text-white bg-black/50 px-4 py-3 rounded-lg border border-amber-500/50">
-                  <p><strong>Had I known</strong> the truth, I wouldn't have trusted him.</p>
+                <div className="flex items-center gap-4">
+                  <span className="bg-slate-700 text-slate-400 px-3 py-1 rounded text-sm">Krok 2</span>
+                  <p className="text-rose-400">Bezlitośnie wyrzucamy "If": <br/><strong className="line-through">If</strong> I had known the truth...</p>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="bg-emerald-600 text-white px-3 py-1 rounded text-sm">Krok 3</span>
+                  <p className="text-emerald-300">Zamieniamy miejscami osobę i "Had" (robimy inwersję)[cite: 36]: <br/><strong className="text-white text-xl">Had I known the truth...</strong></p>
                 </div>
               </div>
             </div>
 
-            <div className="mt-8 bg-slate-800 p-6 rounded-2xl border border-slate-700">
-               <h3 className="font-bold text-blue-400 mb-3 text-xl">Could have i Might have</h3>
-               <p className="text-slate-300 mb-4">Często w trzecim trybie chcemy powiedzieć "być może bym coś zrobił". Zmieniamy wtedy <i>would have</i> na <strong>might have</strong> (być może by) lub <strong>could have</strong> (mógłbym, miałem fizyczną szansę).</p>
-               <ul className="space-y-3 text-slate-200">
-                 <li>👉 If I had saved money, I <strong className="text-blue-400">could have bought</strong> that house. <span className="opacity-70 text-sm">(miałbym na to środki)</span></li>
-                 <li>👉 If we had invited him, he <strong className="text-blue-400">might have come</strong>. <span className="opacity-70 text-sm">(istniała szansa, że by przyszedł)</span></li>
-               </ul>
+            {/* WIELKA PUŁAPKA - PRZECZENIA */}
+            <div className="bg-rose-950/50 p-8 rounded-2xl border border-rose-500/30 mb-10 relative overflow-hidden">
+              <div className="absolute top-0 right-0 bg-rose-600 text-white text-xs font-black px-4 py-2 rounded-bl-xl uppercase tracking-widest">Ważny Haczyk</div>
+              <h3 className="text-2xl font-black text-rose-400 mb-4 flex items-center gap-2">
+                ⚠️ Jak zrobić przeczenie? (Level Hard)
+              </h3>
+              <p className="text-slate-300 mb-4">
+                Jeżeli oryginalne zdanie było przeczące (np. <span className="italic">If I hadn't gone...</span>), to podczas robienia inwersji <strong>NIE WOLNO wyciągnąć słówka "NOT" na początek!</strong> Operator "Had" wędruje na przód sam, a "not" zostaje przyklejone po osobie.
+              </p>
+              
+              <div className="grid md:grid-cols-2 gap-6 mt-4">
+                <div className="bg-black/40 p-4 rounded-xl border border-rose-500/50">
+                  <p className="text-rose-500 font-bold mb-2">❌ BŁĄD (Częsty!)</p>
+                  <p className="font-mono text-slate-400 line-through">Hadn't I gone to the party...</p>
+                </div>
+                <div className="bg-black/40 p-4 rounded-xl border border-emerald-500/50">
+                  <p className="text-emerald-400 font-bold mb-2">✅ POPRAWNIE</p>
+                  <p className="font-mono text-white"><strong>Had I not gone</strong> to the party...</p>
+                </div>
+              </div>
             </div>
+
+            {/* TABELA PRZYKŁADÓW */}
+            <div>
+              <h3 className="text-xl font-bold text-amber-400 mb-4 border-b border-slate-700 pb-2">📖 Porównanie w praktyce</h3>
+              <div className="space-y-4">
+                
+                {/* Przykład 1 */}
+                <div className="bg-slate-800/50 p-4 rounded-xl">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-2">
+                    <p className="font-mono text-slate-400 text-sm">Standard (B2): If she had listened to me...</p>
+                    <span className="text-slate-500 hidden md:block">➔</span>
+                    <p className="font-mono text-emerald-300 font-bold">Inwersja (C1): Had she listened to me...</p>
+                  </div>
+                  <p className="text-slate-300">...we wouldn't be in this mess. <span className="text-slate-500 text-sm">(...nie bylibyśmy w tym bagnie.)</span></p>
+                </div>
+
+                {/* Przykład 2 */}
+                <div className="bg-slate-800/50 p-4 rounded-xl">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-2">
+                    <p className="font-mono text-slate-400 text-sm">Standard (B2): If they had not missed the flight...</p>
+                    <span className="text-slate-500 hidden md:block">➔</span>
+                    <p className="font-mono text-rose-300 font-bold">Inwersja (C1): Had they not missed the flight...</p>
+                  </div>
+                  <p className="text-slate-300">...they would have arrived on time. <span className="text-slate-500 text-sm">(...dotarliby na czas.)</span></p>
+                </div>
+
+              </div>
+            </div>
+
           </section>
         </div>
       )}
