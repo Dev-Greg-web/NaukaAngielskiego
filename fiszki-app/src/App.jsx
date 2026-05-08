@@ -5,10 +5,10 @@ import {
   Zap, Map, ArrowLeft, Trophy, CheckCircle, Lock, BookOpen, 
   Library, ChevronRight, Volume2, Ear, ArrowRightLeft, 
   Shield, User, LogOut, Key, Trash2, UserPlus, Users, Settings,
-  Bot, Mic // <-- DODANO Mic
+  Bot, Mic 
 } from 'lucide-react';
 
-// IMPORTY KOMPONENTÓW GRAMATYKI (zakładam, że masz je u siebie)
+// IMPORTY KOMPONENTÓW GRAMATYKI
 import PresentSimple from './components/PresentSimple';
 import PastSimple from './components/PastSimple';
 import PresentPerfect from './components/PresentPerfect';
@@ -33,7 +33,7 @@ import PassiveVoice from './components/PassiveVoice';
 import ChatBot from './components/ChatBot';
 import SpeechPractice from './components/SpeechPractice';
 
-// NOWOŚĆ: Importujemy nasz algorytm SM-2!
+// IMPORT ALGORYTMU SM-2
 import { calculateSM2 } from './utils/sm2';
 
 const getTodayStr = () => new Date().toISOString().split('T')[0];
@@ -219,7 +219,6 @@ function App() {
     refreshData();
   }, []);
 
-  // OBSŁUGA KLAWIATURY (AKTUALIZACJA DLA SM-2)
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (view !== 'quick-session' && view !== 'plan-session') return;
@@ -233,7 +232,6 @@ function App() {
           e.preventDefault();
           if (!isFlipped) setIsFlipped(true);
         } else if (isFlipped) {
-          // Dla Planu: Od 1 do 4 (Oceny 0, 2, 4, 5). Dla Szybkiej Sesji: Tylko 1 i 2
           if (e.key === '1') isPlan ? handlePlanMark(0) : handleQuickMark('learning');
           else if (e.key === '2') isPlan ? handlePlanMark(2) : handleQuickMark('learning');
           else if (e.key === '3') isPlan ? handlePlanMark(4) : handleQuickMark('known');
@@ -322,7 +320,6 @@ function App() {
     setView('quick-session');
   };
 
-  // Stara funkcja dla szybkiej sesji (zostaje bez zmian, bo to sesja bez zapisu)
   const handleQuickMark = (status) => {
     const card = sessionQueue[0];
     if (status === 'known') setQuickKnown(prev => [...prev, card]);
@@ -343,7 +340,6 @@ function App() {
     if (file) {
       Papa.parse(file, {
         complete: (res) => {
-          // NOWOŚĆ: Dodajemy domyślne stany dla algorytmu SM-2
           const parsed = res.data.filter(r => r.length >= 2 && r[0].trim() !== '').map((r, i) => ({ 
             id: Date.now() + i, front: r[0], back: r[1], step: 0, nextReview: getTodayStr(), dayAssigned: 1,
             repetitions: 0, easeFactor: 2.5, interval: 0
@@ -383,7 +379,6 @@ function App() {
     setView('plan-session');
   };
 
-  // NOWOŚĆ: Potężne serce algorytmu SM-2
   const handlePlanMark = (quality) => {
     const currentCard = sessionQueue[0];
     setIsFlipped(false); setQuizFeedback(null); setQuizInput('');
@@ -391,7 +386,6 @@ function App() {
     setTimeout(() => {
       let updatedDeck = planDeck;
 
-      // Obliczanie nowych wartości przez SM-2
       const sm2Result = calculateSM2(
         quality,
         currentCard.repetitions || 0,
@@ -399,7 +393,6 @@ function App() {
         currentCard.easeFactor || 2.5
       );
 
-      // Logika dla UI na ten moment
       if (quality < 3) {
         setWrongIds(prev => new Set(prev).add(currentCard.id));
         setQuickLearning(prev => [...prev, currentCard]); 
@@ -407,19 +400,17 @@ function App() {
         setQuickKnown(prev => [...prev, currentCard]);
       }
 
-      // Aktualizacja bazy
       updatedDeck = planDeck.map(c => c.id === currentCard.id ? { 
         ...c, 
-        step: c.step + 1, // Krok trzymamy tylko dla mapy progresu (odróżnia "Nowe" od "Przerobionych")
+        step: c.step + 1,
         repetitions: sm2Result.repetitions,
         easeFactor: sm2Result.easeFactor,
         interval: sm2Result.interval,
-        nextReview: sm2Result.nextReviewDate.split('T')[0] // Data format: YYYY-MM-DD
+        nextReview: sm2Result.nextReviewDate.split('T')[0] 
       } : c);
 
       setPlanDeck(updatedDeck);
 
-      // Przejście do kolejnej fiszki
       setSessionQueue(prev => {
         const newQ = prev.slice(1);
         if (newQ.length === 0) { syncToServer(updatedDeck, planSettings, stats); setView('plan-summary'); }
@@ -443,15 +434,20 @@ function App() {
 
     if (isCorrect) {
       setTimeout(() => {
-        // Jeśli dobrze odpowiedział, automatycznie traktujemy to jako Dobre (4)
         isPlan ? handlePlanMark(4) : handleQuickMark('known');
       }, 1000);
     }
   };
 
+  // NOWA FUNKCJA: Wymuszenie poprawnej odpowiedzi
+  const handleQuizOverride = () => {
+    const isPlan = view === 'plan-session';
+    // Traktujemy odpowiedź jako poprawną (ocena 4 dla SM-2 lub status 'known' dla Szybkiej Sesji)
+    isPlan ? handlePlanMark(4) : handleQuickMark('known');
+  };
+
   const handleQuizAcknowledge = () => {
     const isPlan = view === 'plan-session';
-    // Jeśli źle wpisał i potwierdza, to jest Pustka/Pomyłka (1)
     isPlan ? handlePlanMark(1) : handleQuickMark('learning');
   };
 
@@ -914,7 +910,6 @@ function App() {
               <div className="min-h-20 w-full flex items-center justify-center">
                 {isFlipped && (
                   <div className="w-full flex gap-4 animate-in fade-in slide-in-from-bottom-2">
-                    {/* W PLANIE NAUKI (SM-2) MAMY 4 PRZYCISKI OCENY */}
                     {isPlan ? (
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 w-full">
                         <button onClick={() => handlePlanMark(0)} className="bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/30 px-3 py-3 rounded-2xl transition flex flex-col items-center justify-center gap-1 w-full">
@@ -931,7 +926,6 @@ function App() {
                         </button>
                       </div>
                     ) : (
-                      // W SZYBKIEJ SESJI MAMY PO STAREMU 2 PRZYCISKI (Brak algorytmu)
                       <div className="flex gap-4 w-full">
                         <button onClick={() => handleQuickMark('learning')} className="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/30 px-4 py-3 rounded-2xl transition flex justify-center items-center gap-3">
                           <X size={24} /> <div className="flex flex-col items-start text-left"><span className="font-black text-lg leading-tight">UCZĘ SIĘ</span><span className="text-xs font-semibold opacity-60">Klawisz [1]</span></div>
@@ -984,9 +978,16 @@ function App() {
                       <p className="text-red-500 text-sm font-bold uppercase mb-1">Poprawna odpowiedź:</p>
                       <p className="text-red-700 text-2xl font-black">{currentBackText}</p>
                     </div>
-                    <button type="button" onClick={handleQuizAcknowledge} autoFocus className="w-full bg-slate-800 hover:bg-slate-900 text-white font-black py-4 rounded-2xl transition flex items-center justify-center gap-2">
-                      Zrozumiałem, dalej <ArrowRightLeft size={20} />
-                    </button>
+                    
+                    {/* Zmieniony układ przycisków */}
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <button type="button" onClick={handleQuizOverride} className="flex-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 font-bold py-4 rounded-2xl transition flex items-center justify-center gap-2 shadow-sm">
+                        <Check size={20} /> Miałem rację
+                      </button>
+                      <button type="button" onClick={handleQuizAcknowledge} autoFocus className="flex-[2] bg-slate-800 hover:bg-slate-900 text-white font-black py-4 rounded-2xl transition flex items-center justify-center gap-2 shadow-sm">
+                        Zrozumiałem, dalej <ArrowRightLeft size={20} />
+                      </button>
+                    </div>
                   </div>
                 )}
               </form>
