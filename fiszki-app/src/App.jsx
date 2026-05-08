@@ -439,13 +439,13 @@ function App() {
     }
   };
 
-  // NOWA FUNKCJA: Wymuszenie poprawnej odpowiedzi
+  // FUNKCJA: Wymuszenie poprawnej odpowiedzi ("Miałem rację")
   const handleQuizOverride = () => {
     const isPlan = view === 'plan-session';
-    // Traktujemy odpowiedź jako poprawną (ocena 4 dla SM-2 lub status 'known' dla Szybkiej Sesji)
     isPlan ? handlePlanMark(4) : handleQuickMark('known');
   };
 
+  // FUNKCJA: Kontynuacja po błędzie ("Zrozumiałem, dalej")
   const handleQuizAcknowledge = () => {
     const isPlan = view === 'plan-session';
     isPlan ? handlePlanMark(1) : handleQuickMark('learning');
@@ -979,9 +979,9 @@ function App() {
                       <p className="text-red-700 text-2xl font-black">{currentBackText}</p>
                     </div>
                     
-                    {/* Zmieniony układ przycisków */}
+                    {/* ZAKTUALIZOWANY FRAGMENT: DWA PRZYCISKI PO BŁĘDZIE */}
                     <div className="flex flex-col sm:flex-row gap-3">
-                      <button type="button" onClick={handleQuizOverride} className="flex-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 font-bold py-4 rounded-2xl transition flex items-center justify-center gap-2 shadow-sm">
+                      <button type="button" onClick={handleQuizOverride} className="flex-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 font-bold py-4 rounded-2xl transition flex items-center justify-center gap-2 shadow-sm border border-emerald-200">
                         <Check size={20} /> Miałem rację
                       </button>
                       <button type="button" onClick={handleQuizAcknowledge} autoFocus className="flex-[2] bg-slate-800 hover:bg-slate-900 text-white font-black py-4 rounded-2xl transition flex items-center justify-center gap-2 shadow-sm">
